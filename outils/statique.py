@@ -25,13 +25,14 @@ def main():
     if os.path.isdir(out):
         shutil.rmtree(out)
     shutil.copytree(os.path.join(ROOT, 'web'), out)
-    dst = os.path.join(out, 'py', 'jeu')
+    dst = os.path.join(out, 'py')
     os.makedirs(dst)
     fichiers = []
+    # les sources sont servies en .txt (certains hébergeurs refusent l'extension .py)
     for f in sorted(os.listdir(os.path.join(ROOT, 'jeu'))):
         if f.endswith('.py'):
-            shutil.copy(os.path.join(ROOT, 'jeu', f), dst)
-            fichiers.append('jeu/' + f)
+            shutil.copy(os.path.join(ROOT, 'jeu', f), os.path.join(dst, f[:-3] + '.txt'))
+            fichiers.append(dict(f='jeu/' + f, u=f[:-3] + '.txt'))
     with open(os.path.join(out, 'py', 'manifest.json'), 'w', encoding='utf-8') as fh:
         json.dump(dict(fichiers=fichiers), fh)
     if a.cdn:

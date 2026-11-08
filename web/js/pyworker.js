@@ -55,8 +55,9 @@ async function init(arg) {
   postMessage({ type: 'progres', txt: 'Installation du moteur…' });
   const man = await (await fetch(base + 'py/manifest.json')).json();
   py.FS.mkdirTree('/home/pyodide/jeu');
-  for (const f of man.fichiers) {
-    const txt = await (await fetch(base + 'py/' + f)).text();
+  for (const e of man.fichiers) {
+    const f = typeof e === 'string' ? e : e.f, u = typeof e === 'string' ? e : e.u;
+    const txt = await (await fetch(base + 'py/' + u)).text();
     py.FS.writeFile('/home/pyodide/' + f, txt);
   }
   postMessage({ type: 'progres', txt: 'Génération de la carte…' });
