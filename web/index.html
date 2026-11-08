@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Feux de forêt — simulateur</title>
+<meta name="theme-color" content="#1b211a">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+  <header class="barre">
+    <div class="titre-date"><span id="t-heure">Jour 1 · 11:00</span><small id="t-scenario">Simulateur de feux de forêt</small></div>
+    <span class="badge" id="t-mode">MAQUETTE</span>
+    <div class="pills" id="pills">
+      <div class="pill" title="Température"><span class="ico">🌡</span><span id="p-temp">–</span></div>
+      <div class="pill" title="Humidité de l'air"><span class="ico">💧</span><span id="p-hr">–</span></div>
+      <div class="pill" title="Vent (d'où il vient) et rafales"><span class="fleche" id="p-fleche">➤</span><span id="p-vent">–</span></div>
+      <div class="pill risque" id="p-risque" title="Danger météorologique d'incendie">–</div>
+      <div class="pill" id="p-avions" title="Moyens aériens">✈ –</div>
+    </div>
+    <div class="tresorerie" title="Surface brûlée depuis le début"><div class="etiquette">BRÛLÉ</div><div class="argent" id="t-ha">0 ha</div></div>
+  </header>
+  <main id="zone">
+    <canvas id="scene" aria-label="Carte des feux de forêt en hexagones"></canvas>
+    <div id="etiquettes"></div>
+    <div class="flottant temps" role="group" aria-label="Vitesse" id="temps"></div>
+    <div class="flottant lentilles" role="group" aria-label="Calques" id="lentilles">
+      <button type="button" data-l="prevision" aria-pressed="false" title="Où le feu sera dans 30, 60, 120 min">Prévision</button>
+      <button type="button" data-l="moyens" aria-pressed="true" title="Traits des moyens vers leurs postes">Missions</button>
+      <button type="button" data-l="eau" aria-pressed="true" title="Zones mouillées et retardant">Eau, retardant</button>
+      <button type="button" data-l="noms" aria-pressed="true">Noms</button>
+    </div>
+    <div class="flottant outils" role="group" aria-label="Outils">
+      <button type="button" id="b-allumer" title="Touchez ensuite un hexagone pour y allumer un feu">🔥 Allumer un feu</button>
+      <button type="button" id="b-inter" class="prim" title="Vue rapprochée du feu choisi">🔍 Intervention</button>
+    </div>
+    <div class="flottant boussole" id="boussole" title="Vent"><svg viewBox="-30 -30 60 60" width="58" height="58"><circle r="26" fill="none" stroke="#b3bca5" stroke-width="2"/><text y="-17" text-anchor="middle" font-size="9" fill="#b3bca5" font-weight="800">N</text><g id="aiguille"><path d="M0 -20 L7 6 L0 1 L-7 6 Z" fill="#ffc94d" stroke="#0f130e" stroke-width="1.5"/></g></svg><span id="b-vent">–</span></div>
+    <div class="flottant echelle"><span id="ech-txt">1 km</span><div class="regle" id="ech-regle"></div></div>
+    <div class="toasts" id="toasts" aria-live="polite"></div>
+    <div class="flottant inter-hud" id="inter-hud" hidden></div>
+    <div class="chargement" id="chargement"><div><b>Le massif se dresse…</b><small id="ch-txt">Connexion au moteur</small></div></div>
+  </main>
+  <aside>
+    <div class="onglets" role="tablist" id="onglets">
+      <button type="button" role="tab" data-o="situation" aria-selected="true">Situation</button>
+      <button type="button" role="tab" data-o="moyens" aria-selected="false">Moyens</button>
+      <button type="button" role="tab" data-o="journal" aria-selected="false">Journal <span class="pastille" id="pastille" hidden></span></button>
+      <button type="button" role="tab" data-o="partie" aria-selected="false">Partie</button>
+    </div>
+    <div id="contenu"></div>
+  </aside>
+</div>
+<div class="bulle" id="bulle" hidden></div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

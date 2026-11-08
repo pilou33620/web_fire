@@ -1,0 +1,477 @@
+"""Les moyens de lutte : camions-citernes feux de forêt (CCF), bulldozers, hélicoptères bombardiers d'eau (HBE),
+Canadair (indicatif « Pélican ») et Dash 8 de retardant (indicatif « Milan »).
+
+Unités : vitesses en hexagones par minute (1 hexagone = 300 m : 1 hex/min = 18 km/h), eau en litres.
+"""
+import math
+
+from .combustibles import COMB, EAU
+from .feu import BRULE, BRULE_FINI, ETEINT, NOYE
+from .hexa import astar
+
+TYPES = {
+    'ccf': dict(nom='CCF', cap=4000, debit=400, terre=True),
+    'bull': dict(nom='Bulldozer', cap=0, terre=True),
+    'helico': dict(nom='HBE', cap=1200, vitesse=10.0, endurance=150, terre=False),
+    'canadair': dict(nom='Canadair', cap=6000, vitesse=16.0, endurance=180, terre=False),
+    'dash': dict(nom='Dash 8', cap=10000, vitesse=24.0, endurance=240, terre=False),
+}
+
+
+DELAI = dict(ccf=3, bull=6, helico=7, canadair=14, dash=18)   # minutes entre l'alerte et le départ
+
+
+def vitesse_sol(kind, carte, feu, i):
+    """Hexagones par minute pour un engin terrestre sur la cellule i."""
+    r = carte.route[i]
+    f = carte.fuel[i]
+    if kind == 'bull':
+        return [0.35, 0.8, 1.2, 1.2][r] if f not in EAU else 0.0
+    if r >= 3:
+        return 3.3
+    if r == 2:
+        return 2.8
+    if r == 1:
+        return 1.5
+    if f in EAU:
+        return 0.0
+    if feu.etat[i] in (BRULE_FINI, ETEINT, NOYE):
+        return 0.8                        # « travailler depuis le noir »
+    if f in 'PFQJG':
+        return 0.45
+    return 0.9
+
+
+class Moyen:
+    def __init__(self, uid, kind, nom, base, carte):
+        self.id, self.kind, self.nom, self.base = uid, kind, nom, base
+        t = TYPES[kind]
+        self.cap = t['cap']
+        self.eau = self.cap
+        self.terre = t['terre']
+        self.cell = base
+        self.x, self.y = carte.g.cx[base], carte.g.cy[base]
+        self.cap_deg = 0.0
+        self.etat = 'dispo'               # dispo, route, action, ravitaillement, au_sol, retour
+        self.mission = None               # dict(type=..., feu=..., ...)
+        self.chemin = []
+        self.avance = 0.0
+        self.attente = 0                  # minutes d'immobilisation (remplissage, écopage, défrichage)
+        self.phase = None                 # cycle aérien : charge, ecope, vers_feu
+        self.cible = None                 # (x, y) en vol
+        self.vise = None                  # cellules visées par le prochain largage
+        self.vol = 0                      # minutes de vol depuis le dernier plein
+        self.act = None                   # ce que fait le moyen, pour l'affichage
+        self.poste = None
+        self.reprise = None               # mission suspendue pendant un ravitaillement
+        self.litres = 0
+        self.largages = 0
+        self.renfort = False
+
+    # ------------------------------------------------------------------ déplacement au sol
+    def aller(self, p, dest):
+        """Calcule un chemin vers dest. Renvoie False si inaccessible."""
+        c, feu = p.carte, p.feu
+        if dest == self.cell:
+            self.chemin = []
+            return True
+
+        danger = p.danger
+        etat = feu.etat
+        kind = self.kind
+
+        def cout(i, j):
+            v = vitesse_sol(kind, c, feu, j)
+            if v <= 0:
+                if c.fuel[j] == 'R' and c.route[j]:
+                    v = 2.0                 # un pont
+                else:
+                    return None
+            if etat[j] == BRULE and j != dest:
+                return None
+            return 1.0 / v + (2.5 if j in danger else 0.0)
+
+        ch, _ = astar(c.g, self.cell, dest, cout, 0.42)
+        if not ch:
+            return False
+        self.chemin = ch[1:]
+        self.avance = 0.0
+        return True
+
+    def avancer_sol(self, p):
+        c, feu, g = p.carte, p.feu, p.carte.g
+        budget = 1.0
+        while budget > 0 and self.chemin:
+            j = self.chemin[0]
+            if feu.etat[j] == BRULE:
+                dest = self.chemin[-1]
+                if not self.aller(p, dest):
+                    self.chemin = []
+                return
+            v = vitesse_sol(self.kind, c, feu, j) or 2.0
+            reste = (1 - self.avance) / v
+            if reste <= budget:
+                budget -= reste
+                self.cell = j
+                self.chemin.pop(0)
+                self.avance = 0.0
+            else:
+                self.avance += budget * v
+                budget = 0
+        # position affichée : entre la cellule courante et la suivante
+        if self.chemin:
+            j = self.chemin[0]
+            x0, y0, x1, y1 = g.cx[self.cell], g.cy[self.cell], g.cx[j], g.cy[j]
+            self.x, self.y = x0 + (x1 - x0) * self.avance, y0 + (y1 - y0) * self.avance
+            self.cap_deg = math.degrees(math.atan2(y1 - y0, x1 - x0))
+        else:
+            self.x, self.y = g.cx[self.cell], g.cy[self.cell]
+
+    # ------------------------------------------------------------------ vol
+    def voler(self, p, x, y):
+        """Vole vers (x, y). Renvoie True à l'arrivée."""
+        g = p.carte.g
+        v = TYPES[self.kind]['vitesse'] * g.hex_m
+        dx, dy = x - self.x, y - self.y
+        d = math.hypot(dx, dy)
+        self.vol += 1
+        if d > 1:
+            self.cap_deg = math.degrees(math.atan2(dy, dx))
+        if d <= v:
+            self.x, self.y = x, y
+            self.cell = g.sous(x, y) or self.cell
+            return True
+        self.x += dx / d * v
+        self.y += dy / d * v
+        self.cell = g.sous(self.x, self.y) or self.cell
+        return False
+
+    # ------------------------------------------------------------------ un pas
+    def pas(self, p):
+        self.act = None
+        # délai d'alerte : partir de la caserne ou décoller prend du temps
+        m = self.mission
+        if m is not None and m.get('_vu') is None:
+            m['_vu'] = True
+            if self.etat in ('dispo', 'au_sol') and self.attente == 0 and self.cell in (self.base, p.carte.aerodrome, p.carte.helistation):
+                self.attente = DELAI[self.kind]
+                self.etat = 'alerte'
+        if self.attente > 0:
+            self.attente -= 1
+            if self.etat == 'ravitaillement':
+                self.act = dict(k='remplit')
+            elif self.etat == 'action' and self.kind == 'bull':
+                self.act = dict(k='defriche', c=self.cell)
+            elif self.phase == 'ecope':
+                self.act = dict(k='ecope', c=self.cell)
+            elif self.etat == 'au_sol':
+                self.act = dict(k='au_sol')
+            elif self.etat == 'alerte':
+                self.act = dict(k='alerte')
+            if self.attente == 0:
+                self._fin_attente(p)
+            return
+        if self.terre:
+            self._pas_sol(p)
+        else:
+            self._pas_air(p)
+
+    def _fin_attente(self, p):
+        if self.etat == 'ravitaillement':
+            self.eau = self.cap
+            self.etat = 'route'
+            if self.poste is not None:
+                self.aller(p, self.poste)
+        elif self.kind == 'bull' and self.etat == 'action':
+            if self.mission and self.mission.get('cells'):
+                i = self.mission['cells'][0]
+                if p.feu.defricher(i):
+                    p.stats['defriche'] += 1
+                self.mission['cells'].pop(0)
+            self.etat = 'route'
+        elif self.phase == 'ecope':
+            self.eau = self.cap
+            self.phase = 'vers_feu'
+            self.cible = None
+        elif self.etat == 'alerte':
+            self.etat = 'route' if self.terre else 'action'
+        elif self.etat == 'au_sol':
+            self.vol = 0
+            self.eau = self.cap
+            self.etat = 'dispo'
+
+    # ---------------------------------------------------------------- engins terrestres
+    def _pas_sol(self, p):
+        c, feu, g = p.carte, p.feu, p.carte.g
+        # repli si la cellule s'embrase
+        if feu.etat[self.cell] == BRULE and feu.I[self.cell] > 0.2:
+            sur = [j for j in g.voisins(self.cell) if feu.etat[j] != BRULE and vitesse_sol(self.kind, c, feu, j) > 0]
+            if sur:
+                sur.sort(key=lambda j: (feu.etat[j] not in (BRULE_FINI, ETEINT, NOYE), -c.route[j]))
+                self.cell = sur[0]
+                self.chemin = []
+                p.journal_ajout('repli', f'{self.nom} se replie : le feu arrive sur sa position.')
+        m = self.mission
+        if m is None:
+            # pas de mission : retour à la caserne
+            if self.cell != self.base:
+                if not self.chemin:
+                    self.aller(p, self.base)
+                self.etat = 'retour'
+                self.avancer_sol(p)
+            else:
+                self.etat = 'dispo'
+                if self.eau < self.cap:
+                    self.eau = min(self.cap, self.eau + 500)
+                self.avancer_sol(p)
+            return
+        if self.kind == 'bull':
+            return self._pas_bull(p)
+        # ravitaillement en eau
+        if self.eau < 350 and self.etat != 'ravitaillement':
+            pe = p.point_eau_proche(self.cell)
+            if pe is not None:
+                if self.cell == pe:
+                    self.etat = 'ravitaillement'
+                    self.attente = 8
+                    self.act = dict(k='remplit')
+                    return
+                if not self.chemin or self.chemin[-1] != pe:
+                    self.aller(p, pe)
+                self.etat = 'route'
+                self.act = dict(k='va_remplir')
+                self.avancer_sol(p)
+                return
+        poste = m.get('poste')
+        self.poste = poste
+        if poste is not None and self.cell != poste:
+            if not self.chemin or self.chemin[-1] != poste:
+                if not self.aller(p, poste):
+                    m['bloque'] = m.get('bloque', 0) + 1
+            self.etat = 'route'
+            self.avancer_sol(p)
+            # sur le trajet, on arrose ce qui est à portée et peu intense
+            if self.chemin and self.eau > 600:
+                self._arroser_voisins(p, 0.5, debit=200)
+            return
+        self.etat = 'action'
+        self.x, self.y = g.cx[self.cell], g.cy[self.cell]
+        t = m['type']
+        if t == 'defense':
+            proche = any(feu.etat[j] == BRULE for j in g.anneau(self.cell, 2))
+            if proche:
+                if not self._arroser_voisins(p, 1.01):
+                    feu.mouille[self.cell] = min(1.0, feu.mouille[self.cell] + 0.04)
+                    self.eau -= 120
+                    self.act = dict(k='protege', c=self.cell)
+            else:
+                self.act = dict(k='attend')
+        elif t == 'attaque':
+            if not self._arroser_voisins(p, 0.8):
+                if not self._noyer_voisins(p):
+                    m['inactif'] = m.get('inactif', 0) + 1
+                    self.act = dict(k='attend')
+        elif t == 'surveillance':
+            if not self._noyer_voisins(p):
+                if not self._arroser_voisins(p, 0.8):
+                    m['inactif'] = m.get('inactif', 0) + 1
+                    self.act = dict(k='surveille')
+        elif t == 'preposition':
+            self.act = dict(k='attend')
+
+    def _arroser_voisins(self, p, imax, debit=None):
+        feu, g = p.feu, p.carte.g
+        cands = [j for j in [self.cell] + g.voisins(self.cell) if feu.etat[j] == BRULE and feu.I[j] <= imax]
+        if not cands or self.eau <= 0:
+            return False
+        j = max(cands, key=lambda k: feu.I[k])
+        l = min(self.eau, debit or TYPES['ccf']['debit'])
+        feu.arroser(j, l)
+        self.eau -= l
+        self.litres += l
+        self.act = dict(k='arrose', c=j)
+        if j != self.cell:
+            self.cap_deg = math.degrees(math.atan2(g.cy[j] - g.cy[self.cell], g.cx[j] - g.cx[self.cell]))
+        return True
+
+    def _noyer_voisins(self, p):
+        feu, g = p.feu, p.carte.g
+        for j in [self.cell] + g.voisins(self.cell):
+            if feu.etat[j] == ETEINT:
+                if feu.noyer(j):
+                    self.eau -= 150
+                    self.act = dict(k='noie', c=j)
+                    return True
+        return False
+
+    def _pas_bull(self, p):
+        feu, g = p.feu, p.carte.g
+        m = self.mission
+        cells = m.get('cells') or []
+        while cells and (not COMB[p.carte.fuel[cells[0]]]['brule'] or feu.etat[cells[0]] != 0):
+            cells.pop(0)
+        if not cells:
+            m['fini'] = True
+            self.act = dict(k='attend')
+            return
+        i = cells[0]
+        if any(feu.etat[k] == BRULE and feu.I[k] > 0.5 for k in [i] + g.voisins(i)):
+            cells.pop(0)                  # trop près du feu : on saute cette cellule
+            return
+        if self.cell != i:
+            if not self.chemin or self.chemin[-1] != i:
+                if not self.aller(p, i):
+                    cells.pop(0)
+                    return
+            self.etat = 'route'
+            self.avancer_sol(p)
+            return
+        self.etat = 'action'
+        self.attente = 5
+        self.act = dict(k='defriche', c=i)
+
+    # ---------------------------------------------------------------- aéronefs
+    def _pas_air(self, p):
+        c, g, met = p.carte, p.carte.g, p.meteo
+        base = c.aerodrome if self.kind in ('canadair', 'dash') else (c.helistation if c.helistation is not None else self.base)
+        if base is None:
+            base = self.base
+        bx, by = g.cx[base], g.cy[base]
+        m = self.mission
+        cloue = not met.vol_possible(self.kind)
+        trop_long = self.vol > TYPES[self.kind]['endurance']
+        if m is None or cloue or trop_long:
+            if (self.x, self.y) != (bx, by):
+                self.etat = 'retour'
+                self.phase = None
+                if self.voler(p, bx, by):
+                    self.etat = 'au_sol'
+                    self.attente = 20 if trop_long else 2
+                    self.vol = 0
+                return
+            self.etat = 'au_sol' if cloue else 'dispo'
+            self.act = dict(k='au_sol')
+            self.vol = 0
+            if self.kind != 'canadair':
+                self.eau = self.cap
+            return
+        self.etat = 'action'
+        if m['type'] == 'gaar':
+            return self._gaar(p)
+        if self.kind == 'dash':
+            return self._cycle_dash(p, bx, by)
+        if self.eau < self.cap * 0.5 and self.phase != 'vers_feu':
+            self.phase = 'charge'
+        if self.phase in (None, 'charge'):
+            if self.eau >= self.cap * 0.5:
+                self.phase = 'vers_feu'
+            else:
+                self.phase = 'charge'
+                if self.cible is None:
+                    pt = p.eau_aerienne(self)
+                    if pt is None:
+                        self.mission = None
+                        return
+                    self.cible = (g.cx[pt], g.cy[pt])
+                if self.voler(p, *self.cible):
+                    self.phase = 'ecope'
+                    self.attente = 1 if self.kind == 'canadair' else 2
+                    self.act = dict(k='ecope', c=self.cell)
+                    self.cible = None
+                else:
+                    self.act = dict(k='vol')
+                return
+        if self.phase == 'vers_feu':
+            if self.vise is None or self.cible is None:
+                v = p.ia.cible_largage(self)
+                if v is None:
+                    self.act = dict(k='vol')
+                    self.voler(p, bx, by)
+                    return
+                self.vise = v
+                cx = sum(g.cx[i] for i in v) / len(v)
+                cy = sum(g.cy[i] for i in v) / len(v)
+                self.cible = (cx, cy)
+            if self.voler(p, *self.cible):
+                cells = [i for i in self.vise if COMB[c.fuel[i]]['brule']]
+                if cells:
+                    par = self.eau / len(cells)
+                    for i in cells:
+                        p.feu.arroser(i, par)
+                    p.evenement('largage', moyen=self.id, kind=self.kind, cells=cells, litres=round(self.eau), produit='eau',
+                                cap=round(self.cap_deg))
+                    self.litres += self.eau
+                    self.largages += 1
+                    p.stats['largages'] += 1
+                self.eau = 0
+                self.vise = None
+                self.cible = None
+                self.phase = 'charge'
+                self.act = dict(k='largue')
+            else:
+                self.act = dict(k='vol')
+
+    def _gaar(self, p):
+        """Guet aérien armé : chargé d'eau, l'avion tourne au-dessus des massifs (et repère les départs de feu)."""
+        g = p.carte.g
+        if self.eau < self.cap:
+            if self.cible is None or self.phase != 'charge':
+                pt = p.eau_aerienne(self)
+                if pt is None:
+                    return
+                self.phase = 'charge'
+                self.cible = (g.cx[pt], g.cy[pt])
+            if self.voler(p, *self.cible):
+                self.phase = 'ecope'
+                self.attente = 1
+                self.cible = None
+            self.act = dict(k='vol')
+            return
+        pts = self.mission['pts']
+        k = self.mission.get('k', 0)
+        self.phase = 'gaar'
+        if self.voler(p, *pts[k % len(pts)]):
+            self.mission['k'] = k + 1
+        self.act = dict(k='patrouille')
+
+    def _cycle_dash(self, p, bx, by):
+        g = p.carte.g
+        if self.eau <= 0:
+            if self.voler(p, bx, by):
+                self.etat = 'action'
+                self.phase = 'ecope'
+                self.attente = 12
+                self.act = dict(k='remplit')
+            else:
+                self.act = dict(k='vol')
+            return
+        if self.vise is None:
+            v = p.ia.ligne_retardant(self)
+            if not v:
+                self.mission = None
+                return
+            self.vise = v
+            self.cible = (g.cx[v[0]], g.cy[v[0]])
+            self.passe = 0
+        if self.voler(p, *self.cible):
+            p.feu.larguer_retardant(self.vise, self.eau)
+            p.evenement('largage', moyen=self.id, kind='dash', cells=self.vise, litres=round(self.eau), produit='retardant',
+                        cap=round(self.cap_deg))
+            p.stats['largages'] += 1
+            self.litres += self.eau
+            self.largages += 1
+            self.eau = 0
+            self.vise = None
+            self.act = dict(k='largue')
+            self.mission = None           # une ligne par mission : le commandement en redemande s'il faut
+        else:
+            self.act = dict(k='vol')
+
+    # ------------------------------------------------------------------ export
+    def export(self):
+        m = self.mission
+        return dict(id=self.id, k=self.kind, n=self.nom, x=round(self.x), y=round(self.y), cap=round(self.cap_deg),
+                    e=self.etat, eau=round(100 * self.eau / self.cap) if self.cap else None,
+                    m=m.get('label') if m else None, mt=m.get('type') if m else None, f=m.get('feu') if m else None,
+                    p=m.get('poste') if m else None, a=self.act, c=self.cell, r=self.renfort, ph=self.phase,
+                    v=self.vise if self.vise else None, l=round(self.litres))

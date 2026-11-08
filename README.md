@@ -1,0 +1,72 @@
+# Feux de forêt — simulateur autonome en hexagones
+
+Un massif forestier en plateau d'hexagones (même rendu que **web_conquete** : Three.js « cartoon », tuiles en relief,
+contours sombres), des villes, des campings et des sites à protéger, des départs de feu… et un commandement
+automatique qui engage camions, bulldozers, hélicoptères, Canadair et Dash 8 pour sauver ce qui peut l'être.
+La météo (vent, chaleur, humidité, sécheresse, nuit, orages) pilote l'avancée du feu.
+
+Moteur en **Python** (aucune dépendance), interface **web** (HTML/CSS/JS, Three.js inclus dans `web/vendor`).
+
+## Lancer
+
+```bash
+python server.py            # puis ouvrir http://127.0.0.1:8780
+python server.py --lan      # ouvert au réseau local (iPad, téléphone) — pratique sur le Raspberry Pi
+```
+
+`lancer.sh` (Linux, macOS, Termux) et `lancer.bat` (Windows) font la même chose.
+
+**Sans serveur** : `python outils/statique.py` fabrique `dist/`, une version où le même moteur Python tourne dans le
+navigateur grâce à Pyodide (à héberger n'importe où, ou à servir avec `python -m http.server`).
+
+## Ce qu'on voit
+
+- **La carte** : 60 × 44 hexagones de 300 m (18 × 11 km, 7,8 ha par hexagone). Deux massifs générés :
+  *Landes de Gascogne* (océan, dunes, grands étangs, pinède, quadrillage de pistes DFCI) et *massif méditerranéen*
+  (mer, relief, garrigue, maquis, villages perchés). Une graine = une carte.
+- **Le feu** : flammes, braises, fumée qui part sous le vent, sautes de feu, zones brûlées, retardant rouge, zones mouillées.
+- **Les moyens** : CCF (groupes GIFF de 4), bulldozers, hélicoptères bombardiers d'eau (HBE), Canadair « Pélican »,
+  Dash 8 « Milan » ; colonnes de renfort quand le feu grandit.
+- **Le panneau** : météo et danger, chaque feu (statut, vitesse de la tête, stratégie, sites menacés avec l'heure
+  d'arrivée estimée), les moyens, le journal du commandement, les réglages.
+- **Le mode Intervention** (🔍) : la vue rapprochée d'un feu, comme le mode Bataille de web_conquete. Chaque hexagone
+  est découpé en 25 petits hexagones : le front avance dans la forêt arbre par arbre, les camions se postent, les
+  pompiers déroulent les lances, les hélicos et les Canadair font leurs passes de largage, le Dash pose sa ligne rouge,
+  le bulldozer ouvre le pare-feu ; des étiquettes montrent la tête du feu, les points défendus et les missions.
+
+## Le modèle
+
+**Propagation** (`jeu/feu.py`, inspirée de Rothermel), minute par minute, d'hexagone à hexagone :
+vitesse = combustible × vent `exp(0,045·V·cos θ)` × pente `exp(3·dénivelé/300 m)` × humidité du combustible ×
+sécheresse × coupure (route, piste) × eau × retardant × défense. Chaque combustible a sa vitesse, sa durée de
+combustion, son intensité, sa résistance à l'eau et son aptitude aux sautes de feu (brandons par vent > 30 km/h).
+Un hexagone éteint mais pas noyé peut se rallumer (reprise).
+
+**Météo** (`jeu/meteo.py`) : cycle du jour (chaleur à 15 h 30, humidité la nuit), vent qui dérive, rafales,
+bascule de vent possible, orages secs (foudre) puis pluie. Les avions ne volent ni la nuit ni par vent trop fort.
+Scénarios : journée ordinaire, forte chaleur, canicule et vent d'est (type Landiras 2022), orages secs, mistral.
+
+**Commandement** (`jeu/ia.py`), d'après la doctrine française :
+1. attaque massive des feux naissants ;
+2. mise en défense des points sensibles menacés (évacuation préventive des campings) ;
+3. attaque au sol par les flancs, de l'arrière vers la tête, en s'appuyant sur le noir ;
+4. avions sur la tête et les sautes, ligne de retardant devant une tête rapide, pare-feu au bulldozer là où le feu
+   arrivera dans une à deux heures ;
+5. surveillance et noyage des lisières quand le feu est fixé ;
+6. par risque très sévère : patrouilles préventives et guet aérien armé.
+
+Trois doctrines au choix (équilibrée, offensive, défensive). `python outils/banc.py` les compare sur les mêmes journées.
+
+## Fichiers
+
+| Fichier | Rôle |
+|---|---|
+| `server.py` | serveur local (simulation en continu, API `/api/carte`, `/api/etat`, `/api/action`) |
+| `jeu/partie.py` | une partie : carte, météo, feu, moyens, commandement ; départs de feu et détection |
+| `jeu/carte.py` | génération des massifs, villes, sites, routes, pistes DFCI, casernes, vigies, aérodrome |
+| `jeu/feu.py`, `jeu/meteo.py`, `jeu/combustibles.py` | le feu, la météo, les combustibles |
+| `jeu/moyens.py`, `jeu/ia.py` | les moyens de lutte et le commandement |
+| `web/js/plateau.js`, `web/js/modeles.js`, `web/js/moteur.js` | le plateau 3D, les modèles, le moteur de rendu (repris de web_conquete) |
+| `web/js/intervention.js` | le mode Intervention |
+| `web/js/liaison.js`, `web/js/pyworker.js` | la liaison avec le serveur, ou Pyodide dans le navigateur |
+| `tests/` | `python -m unittest discover -s tests` |
