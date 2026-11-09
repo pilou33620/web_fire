@@ -11,7 +11,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from jeu.partie import Partie  # noqa: E402
 
-SANS = dict(ccf=0, bull=0, helico=0, canadair=0, dash=0)
+SANS = dict(ccf=0, fpt=0, bull=0, debr=0, vpc=0, ravit=0, vsav=0, helico=0, canadair=0, dash=0, dragon=0)
 
 
 def jouer(graine, theme, scenario, minutes, doctrine, moyens=None):
