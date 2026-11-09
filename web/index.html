@@ -31,15 +31,18 @@
       <button type="button" data-l="prevision" aria-pressed="false" title="Où le feu sera dans 30, 60, 120 min">Prévision</button>
       <button type="button" data-l="moyens" aria-pressed="true" title="Traits des moyens vers leurs postes">Missions</button>
       <button type="button" data-l="eau" aria-pressed="true" title="Zones mouillées et retardant">Eau, retardant</button>
+      <button type="button" data-l="evac" aria-pressed="true" title="Routes coupées (rouge) et enfumées (gris)">Routes</button>
       <button type="button" data-l="noms" aria-pressed="true">Noms</button>
     </div>
     <div class="flottant outils" role="group" aria-label="Outils">
       <button type="button" id="b-allumer" title="Touchez ensuite un hexagone pour y allumer un feu">🔥 Allumer un feu</button>
       <button type="button" id="b-inter" class="prim" title="Vue rapprochée du feu choisi">🔍 Intervention</button>
+      <button type="button" id="b-cos" aria-pressed="false" title="Qui commande : l'IA ou vous">🤖 COS : IA</button>
     </div>
     <div class="flottant boussole" id="boussole" title="Vent"><svg viewBox="-30 -30 60 60" width="58" height="58"><circle r="26" fill="none" stroke="#b3bca5" stroke-width="2"/><text y="-17" text-anchor="middle" font-size="9" fill="#b3bca5" font-weight="800">N</text><g id="aiguille"><path d="M0 -20 L7 6 L0 1 L-7 6 Z" fill="#ffc94d" stroke="#0f130e" stroke-width="1.5"/></g></svg><span id="b-vent">–</span></div>
     <div class="flottant echelle"><span id="ech-txt">1 km</span><div class="regle" id="ech-regle"></div></div>
     <div class="toasts" id="toasts" aria-live="polite"></div>
+    <div class="flottant visee" id="visee" hidden><span id="visee-txt"></span><button type="button" class="btn" id="visee-annuler">Annuler</button></div>
     <div class="flottant inter-hud" id="inter-hud" hidden></div>
     <div class="chargement" id="chargement"><div><b>Le massif se dresse…</b><small id="ch-txt">Connexion au moteur</small></div></div>
   </main>

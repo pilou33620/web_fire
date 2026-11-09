@@ -185,7 +185,7 @@ export class Plateau {
       const m = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: col, depthTest: false })); m.renderOrder = 9; m.visible = false; this.groupe.add(m); return m;
     };
     this.survol = anneau(0xfff7e6); this.choix = anneau(0xffc94d);
-    this.lentilles = { prevision: false, eau: true };
+    this.lentilles = { prevision: false, eau: true, evac: true };
   }
   majCalques(prev) {
     const m = this.calque, c = new THREE.Color(), mat = new THREE.Matrix4();
@@ -194,6 +194,11 @@ export class Plateau {
     if (this.lentilles.eau) {
       for (const i of this.ret) if (this.etat[i] !== 'f') poser(i, 0xe0403a);
       for (const [i, w] of this.mouille) if (!this.ret.has(i) && w > 25 && this.etat[i] !== 'b') poser(i, w > 55 ? 0x2f7fd8 : 0x6fb6ee);
+    }
+    if (this.lentilles.evac && this.evac) {
+      const coup = new Set(this.evac.coupees);
+      for (const [i, d] of this.evac.fumee) if (!coup.has(i) && this.etat[i] !== 'f') poser(i, d > 60 ? 0x5d5a57 : 0x8a8682);
+      for (const i of coup) if (this.etat[i] !== 'f') poser(i, 0x9b1c1c);
     }
     if (this.lentilles.prevision && prev) {
       for (const [i, t] of prev) { if (this.etat[i] !== '.') continue; poser(i, t < 30 ? 0xff3b1f : t < 60 ? 0xff7a1a : t < 120 ? 0xffb02e : 0xffe07a); }
@@ -332,7 +337,7 @@ export class Flotte {
     this.P = plateau; this.s = s; this.u = new Map(); this.grp = new THREE.Group(); plateau.scene.add(this.grp);
     // une géométrie par type de moyen, partagée
     this.geo = {};
-    const fig = (L) => { const g = new THREE.Group(); fige(L, g); return g; };
+    const fig = (L) => fige(L);
     this.geo.ccf = fig(M.ccf(s)); this.geo.bull = fig(M.bull(s));
     const h = M.helico(s); this.geo.helico = fig(h.L); this.geo.rotor = fig(h.R); this.rotorY = h.rotorY;
     this.geo.seau = fig(M.seau(s));
@@ -409,5 +414,55 @@ export class Flotte {
     if (!pos.length) return;
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
     const l = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.85, depthTest: false })); l.renderOrder = 8; this.lignes.add(l);
+  }
+}
+
+// ------------------------------------------------------------------ les convois d'évacuation (quelques voitures à la file)
+export class Convois {
+  constructor(plateau, s = 1, opts = {}) {
+    this.P = plateau; this.s = s; this.u = new Map(); this.grp = new THREE.Group(); plateau.scene.add(this.grp);
+    this.vers = opts.vers || ((x, y) => plateau.vers3D(x, y));
+    this.sol = opts.sol || ((x, z) => { const i = plateau.cellule(x, z); return i >= 0 ? Math.max(plateau.top[i], -0.9) : 0; });
+    this.voitures = [0xf2f2f2, 0x3a7bd5, 0xd9573b, 0x2fa36b, 0xf2c230, 0x8a8f96].map(col => {
+      const L = lot();
+      put(L, boite(1.6 * s, 0.6 * s, 0.9 * s), col, 0, 0.45 * s, 0);
+      put(L, boite(0.9 * s, 0.45 * s, 0.82 * s), 0x8fc3e0, -0.1 * s, 0.95 * s, 0, 0, 0.06);
+      return fige(L);
+    });
+    this.feux = new THREE.MeshBasicMaterial({ color: 0xffa020 });
+  }
+  maj(liste, now) {
+    const vus = new Set();
+    for (const d of liste) {
+      vus.add(d.id);
+      let o = this.u.get(d.id);
+      if (!o) {
+        o = { grp: new THREE.Group(), cars: [] };
+        const nb = Math.max(2, Math.min(5, Math.round(d.n / 70)));
+        for (let k = 0; k < nb; k++) {
+          const src = this.voitures[(d.id * 3 + k) % this.voitures.length], c = new THREE.Group();
+          for (const m of src.children) c.add(new THREE.Mesh(m.geometry, m.material));
+          c.position.x = -k * 2.3 * this.s; o.grp.add(c); o.cars.push(c);
+        }
+        o.alerte = new THREE.Mesh(new THREE.SphereGeometry(0.5 * this.s, 6, 4), this.feux); o.alerte.position.y = 2.2 * this.s; o.grp.add(o.alerte);
+        this.grp.add(o.grp); this.u.set(d.id, o); o.x0 = o.x1 = d.x; o.y0 = o.y1 = d.y; o.cap0 = o.cap1 = d.cap;
+      } else { o.x0 = o.xa ?? o.x1; o.y0 = o.ya ?? o.y1; o.cap0 = o.capa ?? o.cap1; o.x1 = d.x; o.y1 = d.y; o.cap1 = d.cap; }
+      o.t0 = now; o.d = d;
+    }
+    for (const [id, o] of this.u) if (!vus.has(id)) { this.grp.remove(o.grp); this.u.delete(id); }
+  }
+  anime(dt, t, now, duree) {
+    const P = this.P;
+    for (const o of this.u.values()) {
+      const a = clamp((now - o.t0) / duree, 0, 1);
+      const mx = o.x0 + (o.x1 - o.x0) * a, my = o.y0 + (o.y1 - o.y0) * a;
+      const dc = ((o.cap1 - o.cap0 + 540) % 360) - 180, cap = o.cap0 + dc * a;
+      o.xa = mx; o.ya = my; o.capa = cap;
+      const [x, z] = this.vers(mx, my);
+      o.grp.position.set(x, this.sol(x, z) + 0.15, z);
+      o.grp.rotation.y = -cap * Math.PI / 180;
+      o.alerte.visible = o.d.e === 'bloque' && Math.sin(t * 8) > 0;
+      o.pos = [x, o.grp.position.y, z];
+    }
   }
 }

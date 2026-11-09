@@ -1,6 +1,6 @@
 // Feux de forêt — l'interface : le plateau, la boucle de rendu, l'interrogation du moteur, les gestes et le panneau.
 import { THREE, Camera, clamp } from './moteur.js';
-import { Plateau, Flotte } from './plateau.js';
+import { Plateau, Flotte, Convois } from './plateau.js';
 import { Intervention } from './intervention.js';
 import { choisirLiaison } from './liaison.js';
 import * as UI from './ui.js';
@@ -22,10 +22,11 @@ soleil.shadow.mapSize.set(2048, 2048); soleil.shadow.bias = -0.0006; soleil.shad
 scene.add(soleil, soleil.target);
 const camera = new Camera(toile, cam, { zmin: 60, zmax: 1500 });
 
+let CV = null;
 let L = null, C = null, P = null, F = null, INFOS = null, E = null, inter = null;
 let seq = 0, partieId = null, journal = [], nonLus = 0;
-const sel = { feu: null, cell: null, moyen: null };
-let onglet = 'situation', viser = false, voirNoms = true, voirMissions = true;
+const sel = { feu: null, cell: null, moyen: null, groupe: null };
+let onglet = 'situation', viser = null, voirNoms = true, voirMissions = true;
 let dureeInterp = 1000, tChange = performance.now(), dernierT = -1;
 
 // ------------------------------------------------------------------ lumière du jour et de la nuit
@@ -66,16 +67,17 @@ async function demarrer() {
 
 async function chargerCarte() {
   C = await L.carte();
-  if (P) { scene.remove(P.groupe); scene.remove(F.grp); P.groupe.traverse(o => o.geometry?.dispose()); }
+  if (P) { scene.remove(P.groupe); scene.remove(F.grp); scene.remove(CV.grp); P.groupe.traverse(o => o.geometry?.dispose()); }
   progres('Plantation des pins…');
   await new Promise(r => setTimeout(r, 20));
   P = new Plateau(scene, C);
   F = new Flotte(P, 1.9);
+  CV = new Convois(P, 1.6);
   camera.borne = [-P.OX, P.OX, -P.OZ, P.OZ];
   camera.cible.set(0, 0, 0); camera.dist = 1250;
   redim();
   etiquettesSites();
-  seq = 0; journal = []; E = null; sel.feu = sel.cell = sel.moyen = null;
+  seq = 0; journal = []; E = null; sel.feu = sel.cell = sel.moyen = sel.groupe = null;
   inter?.quitter(); inter = new Intervention(renderer, C, P, zone);
 }
 
@@ -102,13 +104,15 @@ function appliquer(e) {
   E = e;
   P.majEtat(e);
   F.maj(e.moyens, now);
+  CV.maj(e.evac?.convois || [], now);
+  P.evac = e.evac;
   inter?.majEtat(e, now);
   for (const v of e.evts) {
     if (v.type === 'largage') { P.largage(v.cells, v.produit, v.kind); inter?.largage(v); }
   }
   for (const j of e.journal) {
     journal.push(j);
-    if (j.k === 'alerte' || j.k === 'sauve' || (j.k === 'cos' && /renfort|Évacuation|Guet/.test(j.txt))) toast(j.txt, j.k);
+    if (j.k === 'alerte' || j.k === 'sauve' || (j.k === 'cos' && /renfort|Évacuation|Guet|Confinement|abri/.test(j.txt))) toast(j.txt, j.k);
     if (onglet !== 'journal') nonLus++;
   }
   journal = journal.slice(-200);
@@ -159,6 +163,7 @@ function barre(e) {
   $('#b-vent').textContent = `${m.vent} km/h`;
   lumiere(m.t % 1440);
   for (const b of document.querySelectorAll('#temps button')) b.classList.toggle('actif', e.pause ? b.dataset.v === 'pause' : +b.dataset.v === e.vitesse);
+  const cos = $('#b-cos'); cos.textContent = e.commandement === 'manuel' ? '🧑‍🚒 COS : vous' : '🤖 COS : IA'; cos.setAttribute('aria-pressed', e.commandement === 'manuel');
   const pst = $('#pastille'); pst.hidden = !nonLus; pst.textContent = nonLus > 99 ? '99+' : nonLus;
 }
 function boutonsTemps() {
@@ -195,13 +200,41 @@ $('#onglets').onclick = e => {
   for (const x of document.querySelectorAll('#onglets button')) x.setAttribute('aria-selected', x === b);
   $('#contenu').innerHTML = ''; $('#contenu').scrollTop = 0; panneauPeriodique(true);
 };
-$('#contenu').addEventListener('click', e => {
+$('#contenu').addEventListener('click', async e => {
+  const o = e.target.closest('[data-ordre],[data-evac],[data-conf],[data-cos],[data-renfort],[data-groupe],[data-tous],[data-deselect]');
+  if (o) {
+    e.stopPropagation();
+    if (o.dataset.ordre) { ordre(o.dataset.ordre, o.closest('.ordres').dataset.ids.split(',').map(Number)); return; }
+    if (o.dataset.evac) { const r = await L.action({ type: 'evacuer', site: +o.dataset.evac }); if (!r.ok) toast(r.erreur, 'alerte'); return; }
+    if (o.dataset.conf) { await L.action({ type: 'confiner', site: +o.dataset.conf }); return; }
+    if (o.dataset.cos) { await L.action({ type: 'commandement', valeur: o.dataset.cos }); return; }
+    if (o.dataset.renfort !== undefined) { const r = await L.action({ type: 'renfort' }); toast(r.ok ? 'Colonne de renfort demandée : arrivée dans 45 min.' : r.erreur, 'cos'); return; }
+    if (o.dataset.groupe) { sel.groupe = E.moyens.filter(d => d.g === o.dataset.groupe).map(d => d.id); sel.moyen = null; montrerSituation(); return; }
+    if (o.dataset.tous) { sel.groupe = E.moyens.filter(d => d.k === o.dataset.tous).map(d => d.id); sel.moyen = null; montrerSituation(); return; }
+    if (o.dataset.deselect !== undefined) { sel.groupe = null; panneau(); return; }
+  }
   const t = e.target.closest('[data-inter],[data-centrer],[data-feu],[data-moyen]'); if (!t) return;
   if (t.dataset.inter) { entrerIntervention(+t.dataset.inter); return; }
   if (t.dataset.centrer) { centrerFeu(+t.dataset.centrer); return; }
   if (t.dataset.feu) { sel.feu = +t.dataset.feu; centrerFeu(sel.feu); panneau(); return; }
-  if (t.dataset.moyen) { sel.moyen = +t.dataset.moyen; sel.cell = null; const o = F.u.get(sel.moyen); if (o?.pos) camera.aller(o.pos[0], o.pos[2], Math.min(camera.dist, 320)); onglet = 'situation'; document.querySelector('[data-o=situation]').click(); }
+  if (t.dataset.moyen) { sel.moyen = +t.dataset.moyen; sel.cell = null; sel.groupe = null; const o = F.u.get(sel.moyen); if (o?.pos) camera.aller(o.pos[0], o.pos[2], Math.min(camera.dist, 320)); onglet = 'situation'; document.querySelector('[data-o=situation]').click(); }
 });
+function montrerSituation() { if (onglet !== 'situation') document.querySelector('[data-o=situation]').click(); else panneau(); }
+// ------------------------------------------------------------------ ordres du joueur
+function ordre(o, ids) {
+  const [ic, nom, cibles] = UI.ORDRES[o];
+  if (!cibles) { L.action({ type: 'ordre', moyens: ids, ordre: o }).then(r => { if (!r.ok) toast(r.erreur, 'alerte'); }); return; }
+  viser = { type: 'ordre', ordre: o, ids, cells: [], n: cibles };
+  visee(`${ic} ${nom} : touchez ${cibles === 2 ? 'le point de départ du pare-feu' : o === 'defendre' ? 'le site à défendre' : 'l\'endroit visé'} sur la carte.`);
+}
+function visee(txt) {
+  const v = $('#visee');
+  if (!txt) { v.hidden = true; toile.classList.remove('viser'); return; }
+  v.hidden = false; $('#visee-txt').textContent = txt; toile.classList.add('viser');
+  if (inter?.actif) quitterIntervention();
+}
+$('#visee-annuler').onclick = () => { viser = null; visee(null); $('#b-allumer').setAttribute('aria-pressed', 'false'); };
+$('#b-cos').onclick = () => L.action({ type: 'commandement', valeur: E?.commandement === 'manuel' ? 'auto' : 'manuel' });
 function initPartie() {
   const f = $('#f-partie');
   f.querySelectorAll('input[type=range]').forEach(r => r.oninput = () => { r.nextElementSibling.textContent = r.value; });
@@ -323,13 +356,23 @@ camera.onHover = (cx, cy) => {
 camera.onTap = async (cx, cy) => {
   if (inter?.actif) { inter.tap(cx, cy); return; }
   const i = celluleSous(cx, cy);
-  if (viser) {
-    viser = false; $('#b-allumer').setAttribute('aria-pressed', 'false'); toile.classList.remove('viser');
+  if (viser?.type === 'allumer') {
+    viser = null; $('#b-allumer').setAttribute('aria-pressed', 'false'); visee(null);
     if (i >= 0) { const r = await L.action({ type: 'allumer', cell: i }); if (!r.ok) toast(r.erreur || 'Impossible ici', 'info'); }
     return;
   }
+  if (viser?.type === 'ordre') {
+    if (i < 0) return;
+    viser.cells.push(i);
+    if (viser.cells.length < viser.n) { visee('🚧 Pare-feu : touchez maintenant le point d\'arrivée.'); P.choix.visible = true; P.choix.position.set(P.X[i], P.top[i] + 0.45, P.Z[i]); return; }
+    const v = viser; viser = null; visee(null);
+    const r = await L.action({ type: 'ordre', moyens: v.ids, ordre: v.ordre, cell: v.cells[0], cell2: v.cells[1] });
+    if (!r.ok) toast(r.erreur, 'alerte'); else if (r.refus?.length) toast(`Ordre impossible pour : ${r.refus.join(', ')}.`, 'info');
+    P.choix.visible = true; P.choix.position.set(P.X[i], P.top[i] + 0.45, P.Z[i]);
+    return;
+  }
   const o = moyenSous(cx, cy);
-  if (o) { sel.moyen = o.d.id; sel.cell = null; }
+  if (o) { sel.moyen = o.d.id; sel.cell = null; sel.groupe = null; }
   else if (i >= 0) {
     sel.moyen = null; sel.cell = i;
     P.choix.visible = true; P.choix.position.set(P.X[i], P.top[i] + 0.45, P.Z[i]);
@@ -338,13 +381,16 @@ camera.onTap = async (cx, cy) => {
   }
   if (onglet !== 'situation') document.querySelector('[data-o=situation]').click(); else panneau();
 };
-$('#b-allumer').onclick = () => { viser = !viser; $('#b-allumer').setAttribute('aria-pressed', viser); toile.classList.toggle('viser', viser); if (viser) toast('Touchez un hexagone de végétation pour y allumer un feu.', 'info'); };
+$('#b-allumer').onclick = () => {
+  if (viser?.type === 'allumer') { viser = null; visee(null); $('#b-allumer').setAttribute('aria-pressed', 'false'); return; }
+  viser = { type: 'allumer' }; $('#b-allumer').setAttribute('aria-pressed', 'true'); visee('🔥 Touchez un hexagone de végétation pour y allumer un feu.');
+};
 $('#b-inter').onclick = () => { if (inter?.actif) { quitterIntervention(); return; } const f = sel.feu ?? E?.feux.find(f => f.statut !== 'éteint')?.id; if (f == null) { toast('Aucun feu en cours : allumez-en un, ou attendez un départ.', 'info'); return; } entrerIntervention(f); };
 $('#lentilles').onclick = e => {
   const b = e.target.closest('button'); if (!b) return;
   const on = b.getAttribute('aria-pressed') !== 'true'; b.setAttribute('aria-pressed', on);
   const l = b.dataset.l;
-  if (l === 'noms') voirNoms = on; else if (l === 'moyens') voirMissions = on; else { P.lentilles[l] = on; const fp = E?.feux.find(f => f.id === sel.feu); P.majCalques(prevision(fp)); }
+  if (l === 'noms') voirNoms = on; else if (l === 'moyens') voirMissions = on; else if (l === 'evac') { P.lentilles.evac = on; P.majCalques(prevision(E?.feux.find(f => f.id === sel.feu))); } else { P.lentilles[l] = on; const fp = E?.feux.find(f => f.id === sel.feu); P.majCalques(prevision(fp)); }
   camera.sale = true;
 };
 function centrerFeu(id) {
@@ -387,6 +433,7 @@ function boucle() {
     const de = (E?.meteo.de ?? 270) * Math.PI / 180;
     P.anime(dt, t, { x: -Math.sin(de), z: Math.cos(de), v: E?.meteo.vent ?? 10 });
     F.anime(dt, t, now, dureeInterp, P, true);
+    CV.anime(dt, t, now, dureeInterp);
     if (now - traitsT > 400) { F.traits(voirMissions); traitsT = now; }
     const dec = soleil.userData.dec || new THREE.Vector3(-170, 300, 160);
     soleil.position.copy(camera.cible).add(dec); soleil.target.position.copy(camera.cible);

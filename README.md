@@ -34,6 +34,29 @@ navigateur grâce à Pyodide (à héberger n'importe où, ou à servir avec `pyt
   pompiers déroulent les lances, les hélicos et les Canadair font leurs passes de largage, le Dash pose sa ligne rouge,
   le bulldozer ouvre le pare-feu ; des étiquettes montrent la tête du feu, les points défendus et les missions.
 
+## Vous pouvez prendre le commandement
+
+Le bouton **🤖 COS : IA / 🧑‍🚒 COS : vous** décide qui commande.
+- **IA** : tout se gère seul. Vous pouvez quand même donner un ordre à un moyen : il passe « sous vos ordres »
+  (🧑‍🚒) et l'IA n'y touche plus tant que vous ne le lui rendez pas.
+- **Vous** : l'IA ne fait plus que signaler les menaces. Vous engagez les moyens, demandez les renforts, décidez
+  des évacuations.
+
+Choisissez un moyen (sur la carte ou dans l'onglet Moyens), ou un groupe entier (un GIFF de 4 CCF, tous les
+Canadair…), puis un ordre, puis l'endroit sur la carte :
+📍 se poster · 🔥 attaquer · 🛡 défendre un site · 👁 surveiller les lisières · 💧 larguer · 🟥 ligne de retardant ·
+🚧 pare-feu (deux points) · ↩ retour à la base · 🤖 rendre à l'IA.
+
+## Évacuations
+
+Chaque site menacé peut être **évacué** (🚗 convois de 300 personnes qui partent toutes les 3 minutes vers une ville
+sûre ou la sortie du massif) ou **confiné** (🏠 mise à l'abri sur place). La fumée ralentit les convois, les routes
+qui brûlent ou longent un feu intense sont coupées, plusieurs convois sur la même route font un embouteillage.
+Un convoi sans itinéraire sûr fait demi-tour et se met à l'abri au village ; un convoi pris par le feu, ou des
+confinés dans un site qui brûle presque entièrement, comptent comme personnes exposées. L'IA évacue tant que le
+trajet tient avant l'arrivée du feu, et confine quand il est trop tard. Le calque « Routes » montre les routes
+coupées (rouge) et enfumées (gris).
+
 ## Le modèle
 
 **Propagation** (`jeu/feu.py`, inspirée de Rothermel), minute par minute, d'hexagone à hexagone :
@@ -66,6 +89,7 @@ Trois doctrines au choix (équilibrée, offensive, défensive). `python outils/b
 | `jeu/carte.py` | génération des massifs, villes, sites, routes, pistes DFCI, casernes, vigies, aérodrome |
 | `jeu/feu.py`, `jeu/meteo.py`, `jeu/combustibles.py` | le feu, la météo, les combustibles |
 | `jeu/moyens.py`, `jeu/ia.py` | les moyens de lutte et le commandement |
+| `jeu/ordres.py`, `jeu/evacuation.py` | vos ordres de COS ; évacuations, fumée, routes coupées |
 | `web/js/plateau.js`, `web/js/modeles.js`, `web/js/moteur.js` | le plateau 3D, les modèles, le moteur de rendu (repris de web_conquete) |
 | `web/js/intervention.js` | le mode Intervention |
 | `web/js/liaison.js`, `web/js/pyworker.js` | la liaison avec le serveur, ou Pyodide dans le navigateur |
