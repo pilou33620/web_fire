@@ -1,6 +1,6 @@
 # web_fire — simulateur de feux de forêt en hexagones
 
-Un massif forestier en plateau d'hexagones (même rendu que **web_conquete** : Three.js « cartoon », tuiles en relief,
+Toute la Gironde en plateau d'hexagones (même rendu que **web_conquete** : Three.js « cartoon », tuiles en relief,
 contours sombres), des villes, des campings et des sites à protéger, des départs de feu… et un commandement
 automatique qui engage camions, bulldozers, hélicoptères, Canadair et Dash 8 pour sauver ce qui peut l'être.
 La météo (vent, chaleur, humidité, sécheresse, nuit, orages) pilote l'avancée du feu.
@@ -22,9 +22,12 @@ pas se charger, la page rejoue une journée enregistrée du vrai moteur (lecture
 
 ## Ce qu'on voit
 
-- **La carte** : 60 × 44 hexagones de 300 m (18 × 11 km, 7,8 ha par hexagone). Deux massifs générés :
-  *Landes de Gascogne* (océan, dunes, grands étangs, pinède, quadrillage de pistes DFCI) et *massif méditerranéen*
-  (mer, relief, garrigue, maquis, villages perchés). Une graine = une carte.
+- **La carte** : **toute la Gironde**, d'après la vraie géographie de la carte de **web_conquete** : 125 × 172 hexagones
+  de 1 km (125 × 150 km, 87 ha par hexagone). Côte et dunes, bassin d'Arcachon, étangs de Carcans, Lacanau, Cazaux et
+  Biscarrosse, estuaire, Garonne et Dordogne, pinède des Landes, vignobles, Bordeaux, Libourne, Langon, Bazas, Blaye,
+  Lesparre… ; campings de la côte, sites Seveso, réserves, dune du Pilat ; aéroport de Mérignac ; un CSP à Bordeaux et
+  un CIS par ville. Le terrain de web_conquete (une carte d'époque) est traduit en combustibles d'aujourd'hui : la
+  lande de Gascogne est devenue la pinède. La graine change la météo et les départs de feu, pas la carte.
 - **Le feu** : flammes, braises, fumée qui part sous le vent, sautes de feu, zones brûlées, retardant rouge, zones mouillées.
 - **Les moyens** : CCF (groupes GIFF de 4), bulldozers, hélicoptères bombardiers d'eau (HBE), Canadair « Pélican »,
   Dash 8 « Milan » ; colonnes de renfort quand le feu grandit.
@@ -55,8 +58,7 @@ Canadair…), puis un ordre, puis l'endroit sur la carte :
 | **Routes** (enrobé, ligne blanche, panneaux d'entrée de village, garde-corps sur les ponts) | camions rapides (50-60 km/h) ; large coupure, le feu passe mal ; seules voies des convois d'évacuation | bouchons quand les convois roulent ; la fumée ralentit ; plus de départs de feu le long des routes ; elles contournent le massif |
 | **Pistes DFCI** (sable, deux ornières, barrière rouge et blanche à la jonction avec la route, poteau indicateur au bout) | pénètrent le massif jusqu'au feu, postes d'attaque privilégiés ; citernes aux croisements ; coupure ; bulldozer plus rapide | sable : camions lents (27 km/h) ; étroites : au-delà de 2 engins on n'avance plus qu'au pas ; fermées quand elles longent un feu intense ; interdites aux convois de civils |
 
-Dans les Landes, les pistes forment le quadrillage DFCI ; en Méditerranée, elles suivent les crêtes et descendent
-vers les routes. Le tracé est nettoyé à la génération : routes qui tournent peu, sans escaliers ni doublons, rien de
+Les routes sont celles de web_conquete ; les pistes forment le quadrillage DFCI dans la forêt. Le tracé est nettoyé à la génération : routes qui tournent peu, sans escaliers ni doublons, rien de
 construit ni de planté sur l'emprise des voies.
 
 ## Les engins de soutien
@@ -118,6 +120,9 @@ vitesse = combustible × vent `exp(0,045·V·cos θ)` × pente `exp(3·dénivel�
 sécheresse × coupure (route, piste) × eau × retardant × défense. Chaque combustible a sa vitesse, sa durée de
 combustion, son intensité, sa résistance à l'eau et son aptitude aux sautes de feu (brandons par vent > 30 km/h).
 Un hexagone éteint mais pas noyé peut se rallumer (reprise).
+Les réglages datent d'hexagones de 300 m : vitesses du feu, des engins et des convois sont ramenées à la taille des
+hexagones (`Grille.ech`), de sorte que les km/h restent vrais ; l'eau nécessaire pour abattre un hexagone, elle, ne
+l'est pas (sinon 16 CCF ne tiendraient plus un front d'un kilomètre).
 
 **Météo** (`jeu/meteo.py`) : cycle du jour (chaleur à 15 h 30, humidité la nuit), vent qui dérive, rafales,
 bascule de vent possible, orages secs (foudre) puis pluie. Les avions ne volent ni la nuit ni par vent trop fort.
@@ -140,7 +145,8 @@ Trois doctrines au choix (équilibrée, offensive, défensive). `python outils/b
 |---|---|
 | `server.py` | serveur local (simulation en continu, API `/api/carte`, `/api/etat`, `/api/action`) |
 | `jeu/partie.py` | une partie : carte, météo, feu, moyens, commandement ; départs de feu et détection |
-| `jeu/carte.py` | génération des massifs, villes, sites, routes, pistes DFCI, casernes, vigies, aérodrome |
+| `jeu/carte.py` | la carte de la Gironde en hexagones : combustibles, villes, sites, routes, pistes DFCI, casernes, vigies, aérodrome |
+| `jeu/gironde_data.py`, `outils/gironde.py` | la Gironde extraite de web_conquete (cases de 1 km) ; `python outils/gironde.py ../web_conquete` la refait |
 | `jeu/feu.py`, `jeu/meteo.py`, `jeu/combustibles.py` | le feu, la météo, les combustibles |
 | `jeu/moyens.py`, `jeu/ia.py` | les moyens de lutte et le commandement |
 | `jeu/ordres.py`, `jeu/evacuation.py` | vos ordres de COS ; évacuations, fumée, routes coupées |

@@ -24,7 +24,7 @@ def jouer(graine, theme, scenario, minutes, doctrine, moyens=None):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--theme', default='landes')
+    ap.add_argument('--theme', default='gironde')
     ap.add_argument('--scenario', default='canicule')
     ap.add_argument('--graines', default='1-5')
     ap.add_argument('--minutes', type=int, default=540)

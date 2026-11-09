@@ -23,7 +23,7 @@ from jeu.meteo import SCENARIOS
 
 class Sim:
     def __init__(self):
-        self.reglages = dict(graine=7, theme='landes', scenario='canicule', moyens=dict(MOYENS_DEFAUT), doctrine='equilibree')
+        self.reglages = dict(graine=7, theme='gironde', scenario='canicule', moyens=dict(MOYENS_DEFAUT), doctrine='equilibree')
         self.nouvelle({})
     def nouvelle(self, r):
         r = {**self.reglages, **(r or {})}
@@ -51,7 +51,7 @@ class Sim:
         return json.dumps(self.partie.action(a), ensure_ascii=False)
     def infos(self):
         return json.dumps(dict(scenarios={k: v['nom'] for k, v in SCENARIOS.items()},
-                               themes={'landes': 'Landes de Gascogne', 'mediterranee': 'Massif méditerranéen'},
+                               themes={'gironde': 'Gironde'},
                                limites=LIMITES, defaut=MOYENS_DEFAUT, vitesses=[0.25, 0.5, 1, 2, 4, 8, 16]), ensure_ascii=False)
 
 sim = Sim()

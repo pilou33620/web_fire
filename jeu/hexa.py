@@ -14,6 +14,7 @@ class Grille:
     def __init__(self, cols, rows, hex_m):
         self.cols, self.rows, self.hex_m = cols, rows, hex_m
         self.R = hex_m / SQ3                     # rayon (centre -> coin)
+        self.ech = 300 / hex_m                   # les vitesses du jeu sont réglées pour des hexagones de 300 m
         self.n = cols * rows
         self.cx = [0.0] * self.n
         self.cy = [0.0] * self.n

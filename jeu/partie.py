@@ -21,7 +21,7 @@ LIMITES = dict(ccf=(0, 60), fpt=(0, 20), bull=(0, 8), debr=(0, 4), vpc=(0, 3), r
 
 
 class Partie:
-    def __init__(self, graine=7, theme='landes', scenario='canicule', moyens=None, doctrine='equilibree',
+    def __init__(self, graine=7, theme='gironde', scenario='canicule', moyens=None, doctrine='equilibree',
                  heure0=11 * 60, premier_feu=True):
         self.graine, self.theme, self.scenario = graine, theme, scenario
         self.rnd = random.Random(graine * 1009 + 3)

@@ -87,7 +87,7 @@ class Commandement:
             r = cj['ros'] * fw * fs * m.f_humidite(feu.mouille[j]) * fsech * ROUTE_FREIN[c.route[j]]
             r *= 0.12 if feu.ret[j] > 0 else 1.0
             r *= 0.3 ** min(3, feu.defense[j])
-            r *= 0.85                                  # intensité de référence
+            r *= 0.85 * g.ech                          # intensité de référence
             return 1.0 / max(r, 1e-4)
 
         return dijkstra(g, {i: 0.0 for i in cells}, cout, horizon)
@@ -205,9 +205,9 @@ class Commandement:
                 st = 'éteint'
             elif not cells:
                 st = 'maîtrisé'
-            elif f['max_cells'] <= 4 and f['ha'] < 40:
+            elif f['max_cells'] <= 4 and f['ha'] < 5.2 * feu.ha_hex:
                 st = 'naissant'
-            elif p.t - dern > 25 or (f['vitesse'] < 0.25 and len(front) <= 3):
+            elif p.t - dern > 25 / g.ech or (f['vitesse'] < 0.25 and len(front) <= 3):
                 st = 'fixé'
             else:
                 st = 'en progression'

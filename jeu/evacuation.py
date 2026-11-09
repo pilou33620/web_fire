@@ -87,7 +87,7 @@ class Evacuation:
         if dest is None:
             return 1e9
         site = self.p.carte.sites[sid]
-        _, t = astar(self.p.carte.g, site['centre'], dest, self._cout(), 0.6)
+        _, t = astar(self.p.carte.g, site['centre'], dest, self._cout(), 0.6 / self.p.carte.g.ech)
         return (math.ceil(s['reste'] / TAILLE_CONVOI) - 1) * CADENCE + min(t, 1e9) * 0.5
 
     # ------------------------------------------------------------------ routes
@@ -95,7 +95,7 @@ class Evacuation:
         r = self.p.carte.route[i]
         v = [0.35, 0.6, 1.0, 1.5][r]
         f = self.fumee.get(i, 0)
-        return v * max(0.25, 1 - f)
+        return v * max(0.25, 1 - f) * self.p.carte.g.ech
 
     def _cout(self):
         c = self.p.carte
@@ -131,7 +131,7 @@ class Evacuation:
         cands.sort(key=lambda i: g.distance(i, site['centre']))
         cout = self._cout()
         for d in cands[:4]:
-            ch, t = astar(g, site['centre'], d, cout, 0.6)
+            ch, t = astar(g, site['centre'], d, cout, 0.6 / g.ech)
             if ch:
                 return d
         return None
@@ -220,7 +220,7 @@ class Evacuation:
             if not cv.chemin or cv.chemin[0] in self.coupees or (p.t + cv.id) % 6 == 0:
                 if not cv.repli and (cv.dest is None or cv.dest in self.coupees or self.menace.get(cv.dest, 1e9) < 60):
                     cv.dest = self._destination(cv.site) or cv.dest
-                ch, _ = astar(g, cv.cell, cv.dest, cout, 0.6) if cv.dest is not None else (None, 0)
+                ch, _ = astar(g, cv.cell, cv.dest, cout, 0.6 / g.ech) if cv.dest is not None else (None, 0)
                 if not ch and not cv.repli:
                     # plus d'itinéraire sûr : demi-tour vers le village, où l'on se mettra à l'abri
                     origine = c.sites[cv.site]['centre']
