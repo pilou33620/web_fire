@@ -1,4 +1,4 @@
-# Feux de forêt — simulateur autonome en hexagones
+# web_fire — simulateur de feux de forêt en hexagones
 
 Un massif forestier en plateau d'hexagones (même rendu que **web_conquete** : Three.js « cartoon », tuiles en relief,
 contours sombres), des villes, des campings et des sites à protéger, des départs de feu… et un commandement
