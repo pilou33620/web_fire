@@ -93,9 +93,15 @@ class Commandement:
         return dijkstra(g, {i: 0.0 for i in cells}, cout, horizon)
 
     # ------------------------------------------------------------------ boucle
+    def bonus_pc(self, cell):
+        """×1,2 sur l'efficacité des lances si le feu de cette cellule a un poste de commandement posé."""
+        f = self.feux.get(self.racine(self.p.feu.foyer[cell])) if self.p.feu.foyer[cell] >= 0 else None
+        return 1.2 if f and f.get('pc') else 1.0
+
     def pas(self):
         p = self.p
-        if p.t % 2:
+        # un poste de commandement posé : le commandement suit les feux chaque minute au lieu de toutes les deux
+        if p.t % 2 and not any(f.get('pc') for f in self.feux.values() if f['statut'] != 'éteint'):
             return
         par, eteints = self._regrouper()
         self._fiches(par, eteints)
@@ -191,6 +197,8 @@ class Commandement:
                 if cand:
                     v = g.hex_m / min(cand) * 60 / 1000
             f['vitesse'] = round(min(v, 12), 1)
+            f['pc'] = any(u.kind == 'vpc' and u.mission and u.mission.get('type') == 'pc' and u.mission.get('pose', 0) >= 5
+                          and self.racine(u.mission.get('feu', -1)) == r for u in p.moyens)
             dern = max([feu.t_ign[i] for i in cells] + [-999])
             # statut
             if not cells and not f['eteints']:
@@ -345,21 +353,36 @@ class Commandement:
                 besoin = max(1, besoin - 1)
             elif self.doctrine == 'defensive':
                 besoin += 1
-            en_place = [u for u in self._engages(f, 'ccf', 'defense') if u.mission.get('site') == sid]
             postes = self._postes_defense(f, s)
-            for k, u in enumerate(en_place):
-                if u.mission['poste'] not in postes and postes:
-                    u.mission['poste'] = postes[k % len(postes)]
-            manque = besoin - len(en_place)
-            if manque > 0 and postes:
-                for k, u in enumerate(self._libres('ccf', f['prio'] + 200, s['centre'])[:manque]):
+            # les fourgons pompe-tonnes d'abord (spécialistes des maisons, un FPT compte pour 1,5), puis les CCF
+            for kind, poids in (('fpt', 1.5), ('ccf', 1.0)):
+                en_place = [u for u in self._engages(f, kind, 'defense') if u.mission.get('site') == sid]
+                for k, u in enumerate(en_place):
+                    if u.mission['poste'] not in postes and postes:
+                        u.mission['poste'] = postes[k % len(postes)]
+                besoin -= poids * len(en_place)
+                if besoin <= 0 or not postes:
+                    continue
+                n = int(-(-besoin // poids))
+                cand = self._libres(kind, f['prio'] + 200, s['centre'])
+                if kind == 'fpt':
+                    cand = [u for u in cand if u.chemin_vers(p, postes[0])]
+                for k, u in enumerate(cand[:n]):
                     u.mission = dict(type='defense', feu=f['id'], site=sid, poste=postes[(len(en_place) + k) % len(postes)],
                                      label=f"Défense de {s['nom']}")
+                    besoin -= poids
             n_def += besoin
         if n_def:
             parts.append('défense des points sensibles')
-        # --- attaque au sol : par les flancs, de l'arrière vers la tête (feu naissant : directement)
+        # --- poste de commandement : posé en retrait sur une route, dès que le feu dépasse 20 ha
         naissant = st == 'naissant'
+        if not naissant and f['ha'] > 20 and not self._engages(f, 'vpc'):
+            poste = self._poste_pc(f)
+            if poste is not None:
+                for u in self._libres('vpc', f['prio'], centre)[:1]:
+                    u.mission = dict(type='pc', feu=f['id'], poste=poste, label=f"Poste de commandement de {f['nom']}")
+                    p.journal_ajout('cos', f"{u.nom} part installer le poste de commandement de {f['nom']}.")
+        # --- attaque au sol : par les flancs, de l'arrière vers la tête (feu naissant : directement)
         nb_att = 4 if naissant else min(10, 2 + len(f['front']) // 2)
         if self.doctrine == 'defensive' and not naissant:
             nb_att = max(2, nb_att // 2)
@@ -437,6 +460,26 @@ class Commandement:
             self.p.evac.evacuer(s['id'])
         elif eta < 75:
             self.p.evac.confiner(s['id'])
+
+    def _poste_pc(self, f):
+        """Une route à 3-7 hexagones des flammes, hors de la prévision du feu pour les 2 h 30 à venir."""
+        p, g, c = self.p, self.p.carte.g, self.p.carte
+        cells = f['cells']
+        if not cells:
+            return None
+        prev = f.get('prev', {})
+        ref = f['cell0']
+        best = None
+        for i in range(g.n):
+            if c.route[i] < 2 or prev.get(i, 1e9) < 150 or p.feu.etat[i] != INTACT and p.feu.etat[i] != BRULE_FINI:
+                continue
+            d = g.distance(i, ref)
+            if d > 12:
+                continue
+            dmin = min(g.distance(i, k) for k in cells)
+            if 3 <= dmin <= 7 and (best is None or dmin < best[0]):
+                best = (dmin, i)
+        return best[1] if best else None
 
     # ------------------------------------------------------------------ choix des postes
     def _accessible(self, i):
@@ -598,8 +641,43 @@ class Commandement:
             self.renforts += 1
             p.demander_renfort(4)
 
+    def _debroussaillage(self, feux_actifs):
+        """Obligations légales de débroussaillement : hors risque sévère, les débroussailleuses dégagent les abords
+        des villages et des campings. Par risque sévère, les travaux mécaniques en forêt sont interdits (étincelles)."""
+        p, met, c, g = self.p, self.p.meteo, self.p.carte, self.p.carte.g
+        engins = [u for u in p.moyens if u.kind == 'debr' and not u.joueur and not u.hs]
+        if not engins:
+            return
+        interdit = met.danger >= 0.55 or met.nuit or feux_actifs
+        if interdit:
+            for u in engins:
+                if u.mission and u.mission.get('type') == 'debroussailler':
+                    u.mission = None
+            if met.danger >= 0.55 and not met.nuit and getattr(self, '_interdit_jour', None) != met.jour():
+                self._interdit_jour = met.jour()
+                p.journal_ajout('info', 'Risque sévère : travaux mécaniques interdits en forêt, les débroussailleuses restent au dépôt.')
+            return
+        faits = {i for u in engins if u.mission for i in u.mission.get('cells', [])}
+        for u in engins:
+            if u.mission:
+                continue
+            cand = []
+            for s in c.sites:
+                if s['type'] not in ('ville', 'village', 'camping', 'usine'):
+                    continue
+                for i in g.anneau(s['centre'], 3):
+                    if c.fuel[i] in 'PTJGQ' and c.site_de[i] < 0 and i not in faits and p.feu.etat[i] == INTACT:
+                        cand.append(i)
+            if not cand:
+                return
+            cand.sort(key=lambda i: g.distance(i, u.cell))
+            lot_ = cand[:5]
+            faits.update(lot_)
+            u.mission = dict(type='debroussailler', cells=lot_, label='Débroussaillement autour des habitations')
+
     def _prevention(self, feux_actifs):
         p, met, c, g = self.p, self.p.meteo, self.p.carte, self.p.carte.g
+        self._debroussaillage(feux_actifs)
         if feux_actifs:
             self.prepos = self.gaar = False
             return
@@ -657,5 +735,6 @@ class Commandement:
                             menaces=[dict(site=k, eta=v) for k, v in sorted(f['menaces'].items(), key=lambda kv: kv[1])],
                             moyens=moy, detecte=f['detecte'], t0=f['t0'], tDetect=f['t_detect'], cause=f['cause'],
                             sautes=len(f['sautes']), front=f['front'][:80], flancs=f['flancs'][:60],
-                            touches=sorted(f['sites_touches']), cell0=f['cell0']))
+                            touches=sorted(f['sites_touches']), cell0=f['cell0'], pc=bool(f.get('pc')),
+                            prev=[[i, round(t)] for i, t in f.get('prev', {}).items() if t <= 180][:2500] if f.get('pc') else None))
         return out

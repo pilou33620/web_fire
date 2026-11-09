@@ -68,6 +68,7 @@ async function demarrer() {
 
 async function chargerCarte() {
   C = await L.carte();
+  C.fuel = [...C.fuel];                 // modifiable : la débroussailleuse change le combustible
   if (P) { scene.remove(P.groupe); scene.remove(F.grp); scene.remove(CV.grp); P.groupe.traverse(o => o.geometry?.dispose()); }
   progres('Plantation des pins…');
   await new Promise(r => setTimeout(r, 20));
@@ -108,6 +109,7 @@ function appliquer(e) {
     tChange = now; dernierT = e.t;
   }
   E = e;
+  for (const [i, f] of Object.entries(e.fuelMod || {})) C.fuel[+i] = f;
   P.majEtat(e);
   F.maj(e.moyens, now);
   CV.maj(e.evac?.convois || [], now);
@@ -278,9 +280,9 @@ function toast(txt, k) {
 // ------------------------------------------------------------------ étiquettes
 const SYMB = { ville: '🏘', village: '⌂', camping: '⛺', usine: '🏭', reserve: '🌳', patrimoine: '⛪' };
 const COUL_SITE = { sauf: '#fff7e6', 'menacé': '#ffc94d', 'touché': '#ff8a5a', 'détruit': '#a59d92' };
-let etisSites = [], etisFeux = new Map(), etisMoyen = null;
+let etisSites = [], etisFeux = new Map(), etisMoyen = null, etisBlesses = new Map();
 function etiquettesSites() {
-  ETI.innerHTML = ''; etisSites = []; etisFeux = new Map();
+  ETI.innerHTML = ''; etisSites = []; etisFeux = new Map(); etisBlesses = new Map();
   for (const s of C.sites) {
     const el = document.createElement('div');
     el.className = 'ban' + (s.type === 'ville' ? '' : ' petit');
@@ -320,6 +322,19 @@ function majEtiquettes() {
     el.hidden = false; el.style.transform = `translate(${Math.round(p[0] - 15)}px, ${Math.round(p[1] - 15)}px)`;
   }
   for (const [id, el] of etisFeux) if (!vus.has(id)) { el.remove(); etisFeux.delete(id); }
+  // blessés à secourir
+  const vusB = new Set();
+  for (const b of E?.blesses || []) {
+    vusB.add(b.id);
+    let el = etisBlesses.get(b.id);
+    if (!el) { el = document.createElement('div'); el.className = 'eti blesse'; ETI.appendChild(el); etisBlesses.set(b.id, el); }
+    const txt = `🚑 ${b.n} · ${b.g === 'leger' ? 'léger' : b.g === 'grave' ? 'grave' : 'en danger'}`;
+    if (el.textContent !== txt) el.textContent = txt;
+    const p = ecran(P.X[b.cell], P.top[b.cell] + 6, P.Z[b.cell]);
+    if (!p) { el.hidden = true; continue; }
+    el.hidden = false; el.style.transform = `translate(${Math.round(p[0] - el.offsetWidth / 2)}px, ${Math.round(p[1] - 20)}px)`;
+  }
+  for (const [id, el] of etisBlesses) if (!vusB.has(id)) { el.remove(); etisBlesses.delete(id); }
   // le moyen choisi
   const o = sel.moyen != null ? F.u.get(sel.moyen) : null;
   if (o?.pos) {
@@ -357,7 +372,7 @@ function choisirMoyen(d) {
   sel.cell = null;
   if ((d.k === 'ccf' || d.k === 'vlhr') && d.g) { sel.groupe = E.moyens.filter(x => x.g === d.g).map(x => x.id); sel.moyen = null; }
   else { sel.moyen = d.id; sel.groupe = null; }
-  if (E.commandement === 'manuel') {
+  if (E.commandement === 'manuel' && UI.ORDRE_DEFAUT[d.k]) {
     const ids = sel.groupe ? E.moyens.filter(x => sel.groupe.includes(x.id) && x.k !== 'vlhr').map(x => x.id) : [d.id];
     ordre(UI.ORDRE_DEFAUT[d.k], ids);
   } else { desarmer(); visee(null); }

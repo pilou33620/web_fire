@@ -196,6 +196,7 @@ class Evacuation:
                 brule = sum(1 for i in cells if feu.etat[i] in (BRULE, 2)) / max(1, len(cells))
                 if brule > 0.6:
                     s['exposes'] += s['confines']
+                    p.ajouter_blesses(c.sites[sid]['centre'], max(1, round(s['confines'] * 0.03)), 'civil', 'grave', f"habitants de {c.sites[sid]['nom']}")
                     p.journal_ajout('alerte', f"⚠ {s['confines']} personnes confinées à {c.sites[sid]['nom']} sont exposées : le site brûle.")
                     s['confines'] = 0
         # circulation
@@ -213,6 +214,8 @@ class Evacuation:
             if danger and not cv.expose:
                 cv.expose = True
                 s['exposes'] += cv.n
+                p.ajouter_blesses(cv.cell, max(1, round(cv.n * 0.02)), 'civil', 'grave', f"convoi de {c.sites[cv.site]['nom']}")
+                p.ajouter_blesses(cv.cell, round(cv.n * 0.05), 'civil', 'leger', f"convoi de {c.sites[cv.site]['nom']}")
                 p.journal_ajout('alerte', f"⚠ Un convoi de {cv.n} personnes parti de {c.sites[cv.site]['nom']} est pris par le feu !")
             if not cv.chemin or cv.chemin[0] in self.coupees or (p.t + cv.id) % 6 == 0:
                 if not cv.repli and (cv.dest is None or cv.dest in self.coupees or self.menace.get(cv.dest, 1e9) < 60):

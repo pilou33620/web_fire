@@ -26,6 +26,7 @@ COMB = {
     'C': dict(nom='Culture (maïs, céréales)', brule=True, ros=0.045, dur=8, imax=0.40, res=0.7, saute=0.1, col='#d9c25a'),
     'V': dict(nom='Vigne', brule=True, ros=0.006, dur=10, imax=0.25, res=0.6, saute=0.0, col='#b4b660'),
     'O': dict(nom='Oliveraie', brule=True, ros=0.010, dur=20, imax=0.35, res=0.8, saute=0.1, col='#9aa76a'),
+    'Y': dict(nom='Forêt débroussaillée', brule=True, ros=0.014, dur=35, imax=0.55, res=1.2, saute=0.4, col='#6f9e4c'),
     'T': dict(nom='Camping sous les pins', brule=True, ros=0.020, dur=30, imax=0.70, res=1.4, saute=0.5, col='#7aa24c'),
     'B': dict(nom='Village, hameau', brule=True, ros=0.008, dur=90, imax=0.60, res=2.0, saute=0.2, col='#d8cba8'),
     'U': dict(nom='Ville', brule=True, ros=0.004, dur=120, imax=0.60, res=2.2, saute=0.2, col='#d3c7a6'),

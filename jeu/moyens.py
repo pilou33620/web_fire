@@ -13,13 +13,23 @@ TYPES = {
     'ccf': dict(nom='CCF', cap=4000, debit=400, terre=True),
     'bull': dict(nom='Bulldozer', cap=0, terre=True),
     'vlhr': dict(nom='VLHR', cap=0, terre=True),     # véhicule léger hors route du chef de groupe
+    'fpt': dict(nom='FPT', cap=3000, debit=500, terre=True),     # fourgon pompe-tonne : défense des maisons, routes seulement
+    'vpc': dict(nom='VPC', cap=0, terre=True),       # véhicule poste de commandement
+    'debr': dict(nom='Débroussailleuse', cap=0, terre=True),
+    'ravit': dict(nom='Ravitailleur', cap=0, terre=True),     # camion-citerne de gazole
+    'vsav': dict(nom='VSAV', cap=0, terre=True),     # véhicule de secours et d'assistance aux victimes
+    'dragon': dict(nom='Dragon', cap=0, vitesse=12.0, endurance=240, terre=False),   # hélicoptère de secours
     'helico': dict(nom='HBE', cap=1200, vitesse=10.0, endurance=150, terre=False),
     'canadair': dict(nom='Canadair', cap=6000, vitesse=16.0, endurance=180, terre=False),
     'dash': dict(nom='Dash 8', cap=10000, vitesse=24.0, endurance=240, terre=False),
 }
 
 
-DELAI = dict(ccf=3, bull=6, vlhr=3, helico=7, canadair=14, dash=18)
+DELAI = dict(ccf=3, bull=6, vlhr=3, fpt=2, vpc=5, debr=6, ravit=4, vsav=2, helico=7, canadair=14, dash=18, dragon=6)
+# gazole : minutes de travail d'un plein (rouler ou pomper consomme 1 par minute, attendre 0,2)
+CARBURANT = dict(ccf=600, fpt=600, bull=420, vlhr=900, vpc=900, debr=420, ravit=900, vsav=900)
+RESERVES = dict(ccf=500, fpt=300)                 # réserve d'autoprotection par type
+EQUIPAGE = dict(ccf=4, fpt=6, vlhr=2, bull=1, debr=1, vpc=3, ravit=1, vsav=3)
 CONE = 50          # demi-angle du cône des lances (degrés)
 RESERVE = 500      # litres gardés pour l'autoprotection : les lances n'y touchent jamais
 DEBIT_AUTO = 120   # litres par minute des rampes d'aspersion quand le camion est encerclé
@@ -41,8 +51,14 @@ def vitesse_sol(kind, carte, feu, i):
     """Hexagones par minute pour un engin terrestre sur la cellule i."""
     r = carte.route[i]
     f = carte.fuel[i]
-    if kind == 'bull':
+    if kind in ('bull', 'debr'):
         return [0.35, 0.8, 1.2, 1.2][r] if f not in EAU else 0.0
+    if kind == 'fpt':                     # pas tout-terrain : routes et lieux habités seulement
+        if r >= 2:
+            return 3.5 if r == 3 else 3.0
+        return 1.0 if carte.site_de[i] >= 0 and f not in EAU else 0.0
+    if kind in ('vsav', 'ravit', 'vpc') and r == 0:
+        return 0.0 if f in EAU else 0.3
     if r >= 3:
         return 3.3
     if r == 2:
@@ -64,6 +80,10 @@ class Moyen:
         t = TYPES[kind]
         self.cap = t['cap']
         self.eau = self.cap
+        self.carb_max = CARBURANT.get(kind)
+        self.carb = self.carb_max
+        self.reserve = RESERVES.get(kind, 0)
+        self.charge = []                  # VSAV, Dragon : les blessés à bord
         self.terre = t['terre']
         self.cell = base
         self.x, self.y = carte.g.cx[base], carte.g.cy[base]
@@ -264,6 +284,8 @@ class Moyen:
                 self.auto = False
                 self.etat = 'route'
                 p.journal_ajout('cos', f"{self.nom} : le front est passé, fin de l'autoprotection ; l'équipage repart faire le plein.")
+                if p.rnd.random() < 0.3:
+                    p.ajouter_blesses(self.cell, 1, 'pompier', 'leger', f'pompier du {self.nom} (coup de chaleur)')
             return False
         if not self.auto:
             sur = [j for j in g.voisins(self.cell) if feu.etat[j] != BRULE and vitesse_sol(self.kind, c, feu, j) > 0
@@ -278,7 +300,7 @@ class Moyen:
                 self._repli_t = p.t
                 return False
         # plus d'issue : on reste, l'équipage s'abrite dans la cabine et les rampes d'aspersion arrosent le camion
-        if self.kind == 'ccf' and self.eau > 0:
+        if self.kind in ('ccf', 'fpt') and self.eau > 0:
             if not self.auto:
                 self.auto = True
                 p.stats['autoprotections'] = p.stats.get('autoprotections', 0) + 1
@@ -291,15 +313,33 @@ class Moyen:
             self.chemin = []
             self.act = dict(k='autoprotection', c=self.cell)
             return True
-        if self.kind == 'ccf' or feu.etat[self.cell] == BRULE and feu.I[self.cell] > 0.5:
+        if self.kind in ('ccf', 'fpt') or feu.etat[self.cell] == BRULE and feu.I[self.cell] > 0.5:
             self.hs = True
+            p.ajouter_blesses(self.cell, EQUIPAGE.get(self.kind, 2), 'equipage', 'danger', f'équipage du {self.nom}')
             self.auto = False
             self.mission, self.joueur = None, False
             self.etat = 'hs'
             p.stats['perdus'] = p.stats.get('perdus', 0) + 1
-            quoi = "réserve d'autoprotection épuisée" if self.kind == 'ccf' else 'pris par les flammes'
-            p.journal_ajout('alerte', f"⚠ {self.nom} perdu ({quoi}) : l'équipage est évacué de justesse, l'engin est hors service.")
+            quoi = "réserve d'autoprotection épuisée" if self.kind in ('ccf', 'fpt') else 'pris par les flammes'
+            p.journal_ajout('alerte', f"⚠ {self.nom} perdu ({quoi}) : l'équipage s'est mis à l'abri, il faut l'évacuer (Dragon ou VSAV).")
             return True
+        return False
+
+    def _gazole(self, p):
+        """Consommation de gazole ; panne sèche à zéro (jusqu'à l'arrivée d'un ravitailleur). Renvoie True en panne."""
+        if self.carb_max is None:
+            return False
+        if self.cell == self.base and self.etat in ('dispo', 'retour'):
+            self.carb = self.carb_max
+        actif = self.etat in ('route', 'retour', 'ravitaillement') or (self.act or {}).get('k') in ('arrose', 'protege', 'mouille', 'noie', 'defriche', 'debroussaille', 'autoprotection')
+        self.carb = max(0.0, self.carb - (1.0 if actif else 0.2))
+        if self.carb <= 0:
+            if self.etat != 'panne':
+                p.journal_ajout('alerte', f"⛽ {self.nom} en panne sèche" + (' : un ravitailleur est demandé.' if p.nb_kind('ravit') else ' : plus de gazole, il attendra.'))
+            self.etat, self.act, self.chemin = 'panne', dict(k='panne'), []
+            return True
+        if self.etat == 'panne':
+            self.etat = 'route'
         return False
 
     def _pas_sol(self, p):
@@ -309,6 +349,11 @@ class Moyen:
             return
         if self._securite(p):
             return
+        if self._gazole(p):
+            return
+        # gazole presque vide et pas de ravitailleur : on rentre faire le plein à la caserne
+        if self.carb_max and self.carb < 0.12 * self.carb_max and not p.nb_kind('ravit') and self.mission and not self.joueur:
+            self.mission = None
         m = self.mission
         if m is None:
             # pas de mission : retour à la caserne
@@ -327,8 +372,12 @@ class Moyen:
             return self._pas_bull(p)
         if self.kind == 'vlhr':
             return self._pas_chef(p)
+        if self.kind == 'debr':
+            return self._pas_debr(p)
+        if self.kind in ('vpc', 'ravit', 'vsav'):
+            return self._pas_logistique(p)
         # ravitaillement en eau
-        if self.eau < RESERVE + 300 and self.etat != 'ravitaillement':
+        if self.eau < self.reserve + 300 and self.etat != 'ravitaillement':
             pe = p.point_eau_proche(self.cell)
             if pe is not None:
                 if self.cell == pe:
@@ -361,7 +410,7 @@ class Moyen:
             proche = any(feu.etat[j] == BRULE for j in g.anneau(self.cell, 2))
             if proche:
                 if not self._arroser_voisins(p, 1.01):
-                    if self.eau > RESERVE + 120:
+                    if self.eau > self.reserve + 120:
                         feu.mouille[self.cell] = min(1.0, feu.mouille[self.cell] + 0.04)
                         self.eau -= 120
                     self.act = dict(k='protege', c=self.cell)
@@ -398,7 +447,7 @@ class Moyen:
         feu, g, c = p.feu, p.carte.g, p.carte
         cands = [j for j in g.voisins(self.cell) if dans_cone(g, self.cell, j, cone) and COMB[c.fuel[j]]['brule']
                  and feu.etat[j] != BRULE and feu.mouille[j] < 0.6]
-        if not cands or self.eau < RESERVE + 150:
+        if not cands or self.eau < self.reserve + 150:
             self.act = dict(k='attend', d=cone[0])
             return
         j = min(cands, key=lambda k: feu.mouille[k])
@@ -406,6 +455,93 @@ class Moyen:
         self.eau -= 120
         self.litres += 120
         self.act = dict(k='mouille', c=j, d=cone[0])
+
+    def _pas_debr(self, p):
+        """Débroussailleuse : broie le sous-bois et les broussailles, cellule après cellule (3 minutes chacune)."""
+        feu, g, c = p.feu, p.carte.g, p.carte
+        m = self.mission
+        cells = m.get('cells') or []
+        while cells and (c.fuel[cells[0]] not in 'PFTJGQ' or feu.etat[cells[0]] != 0):
+            cells.pop(0)
+        if not cells:
+            m['fini'] = True
+            self.act = dict(k='attend')
+            return
+        i = cells[0]
+        if any(feu.etat[k] == BRULE for k in [i] + g.voisins(i)):
+            cells.pop(0)
+            return
+        if self.cell != i:
+            if not self.chemin or self.chemin[-1] != i:
+                if not self.aller(p, i):
+                    cells.pop(0)
+                    return
+            self.etat = 'route'
+            self.avancer_sol(p)
+            return
+        self.etat = 'action'
+        m['travail'] = m.get('travail', 0) + 1
+        self.act = dict(k='debroussaille', c=i)
+        if m['travail'] >= 3:
+            m['travail'] = 0
+            c.fuel[i] = 'Y' if c.fuel[i] in 'PFT' else 'H'
+            p.stats['debroussaille'] = p.stats.get('debroussaille', 0) + 1
+            p.carte_modifiee.add(i)
+            cells.pop(0)
+
+    def _pas_logistique(self, p):
+        """PC, ravitailleur, VSAV : aller au poste, puis faire leur travail (les missions viennent de la logistique)."""
+        g = p.carte.g
+        m = self.mission
+        poste = m.get('poste')
+        if poste is not None and self.cell != poste:
+            if not self.chemin or self.chemin[-1] != poste:
+                if not self.aller(p, poste):
+                    m['bloque'] = m.get('bloque', 0) + 1
+            self.etat = 'route'
+            self.avancer_sol(p)
+            return
+        self.etat = 'action'
+        self.x, self.y = g.cx[self.cell], g.cy[self.cell]
+        t = m['type']
+        if t == 'pc':
+            m['pose'] = m.get('pose', 0) + 1
+            self.act = dict(k='pc' if m['pose'] >= 5 else 'deploie')
+            if m['pose'] == 5:
+                p.journal_ajout('cos', f"📡 {self.nom} posé : prévision du feu affichée, commandement plus réactif, lances mieux coordonnées (+20 %).")
+        elif t == 'ravitailler':
+            u = next((x for x in p.moyens if x.id == m['cible']), None)
+            if u is None or u.carb_max is None or g.distance(u.cell, self.cell) > 1:
+                m['fini'] = True
+                return
+            m['travail'] = m.get('travail', 0) + 1
+            self.act = dict(k='ravitaille', c=u.cell)
+            if m['travail'] >= 6:
+                u.carb = u.carb_max
+                if u.etat == 'panne':
+                    u.etat = 'route'
+                p.journal_ajout('info', f"⛽ {self.nom} a fait le plein de {u.nom}.")
+                m['fini'] = True
+        elif t == 'secours':
+            b = p.blesse(m['cible'])
+            if b is None or b['etat'] != 'attente':
+                m['fini'] = True
+                return
+            m['travail'] = m.get('travail', 0) + 1
+            self.act = dict(k='soigne', c=self.cell)
+            if m['travail'] >= 5:
+                n = min(3, b['n'])
+                b['n'] -= n
+                self.charge.append(dict(n=n, g=b['g'], t=b['t']))
+                if b['n'] <= 0:
+                    b['etat'] = 'pris'
+                p.journal_ajout('info', f"🚑 {self.nom} prend en charge {n} blessé{'s' if n > 1 else ''} ({b['quoi']}).")
+                self.mission = dict(type='hopital', poste=p.hopital, label="Transport vers l'hôpital")
+        elif t == 'hopital':
+            p.deposer(self)
+            self.mission = None
+        else:
+            self.act = dict(k='attend')
 
     def _pas_chef(self, p):
         """Le VLHR du chef de groupe suit son groupe et se tient un peu en arrière."""
@@ -425,11 +561,11 @@ class Moyen:
         feu, g = p.feu, p.carte.g
         cands = [j for j in [self.cell] + g.voisins(self.cell) if feu.etat[j] == BRULE and feu.I[j] <= imax
                  and dans_cone(g, self.cell, j, cone)]
-        if not cands or self.eau <= RESERVE:
+        if not cands or self.eau <= self.reserve:
             return False
         j = max(cands, key=lambda k: feu.I[k])
-        l = min(self.eau - RESERVE, debit or TYPES['ccf']['debit'])
-        feu.arroser(j, l)
+        l = min(self.eau - self.reserve, debit or TYPES[self.kind].get('debit', 400))
+        feu.arroser(j, l * p.ia.bonus_pc(j))      # sous un poste de commandement, les lances sont mieux placées
         self.eau -= l
         self.litres += l
         self.act = dict(k='arrose', c=j, d=cone[0] if cone else None)
@@ -440,7 +576,7 @@ class Moyen:
     def _noyer_voisins(self, p, cone=None):
         feu, g = p.feu, p.carte.g
         for j in [self.cell] + g.voisins(self.cell):
-            if feu.etat[j] == ETEINT and dans_cone(g, self.cell, j, cone) and self.eau > RESERVE + 150:
+            if feu.etat[j] == ETEINT and dans_cone(g, self.cell, j, cone) and self.eau > self.reserve + 150:
                 if feu.noyer(j):
                     self.eau -= 150
                     self.act = dict(k='noie', c=j)
@@ -474,8 +610,50 @@ class Moyen:
         self.act = dict(k='defriche', c=i)
 
     # ---------------------------------------------------------------- aéronefs
+    def _pas_dragon(self, p):
+        """Dragon : hélicoptère de secours. Il vole aussi de nuit ; hélitreuillage des équipages et des blessés graves."""
+        g = p.carte.g
+        m = self.mission
+        base = p.carte.helistation if p.carte.helistation is not None else self.base
+        if m is None:
+            bx, by = g.cx[base], g.cy[base]
+            if (self.x, self.y) != (bx, by):
+                self.etat = 'retour'
+                if self.voler(p, bx, by):
+                    self.etat = 'dispo'
+            else:
+                self.etat = 'dispo'
+                self.vol = 0
+            self.act = dict(k='au_sol') if self.etat == 'dispo' else dict(k='vol')
+            return
+        self.etat = 'action'
+        dest = m['poste']
+        if self.voler(p, g.cx[dest], g.cy[dest]):
+            if m['type'] == 'hopital':
+                p.deposer(self)
+                self.mission = None
+                return
+            b = p.blesse(m['cible'])
+            if b is None or b['etat'] != 'attente':
+                self.mission = None
+                return
+            m['travail'] = m.get('travail', 0) + 1
+            self.act = dict(k='treuille', c=dest)
+            if m['travail'] >= 3:
+                n = min(4, b['n'])
+                b['n'] -= n
+                self.charge.append(dict(n=n, g=b['g'], t=b['t']))
+                if b['n'] <= 0:
+                    b['etat'] = 'pris'
+                p.journal_ajout('sauve', f"🚁 {self.nom} hélitreuille {n} personne{'s' if n > 1 else ''} ({b['quoi']}).")
+                self.mission = dict(type='hopital', poste=p.hopital, label="Vers l'hôpital")
+        else:
+            self.act = dict(k='vol')
+
     def _pas_air(self, p):
         c, g, met = p.carte, p.carte.g, p.meteo
+        if self.kind == 'dragon':
+            return self._pas_dragon(p)
         base = c.aerodrome if self.kind in ('canadair', 'dash') else (c.helistation if c.helistation is not None else self.base)
         if base is None:
             base = self.base
@@ -619,5 +797,7 @@ class Moyen:
                     m=m.get('label') if m else None, mt=m.get('type') if m else None, f=m.get('feu') if m else None,
                     p=m.get('poste') if m else None, a=self.act, c=self.cell, r=self.renfort, ph=self.phase,
                     v=self.vise if self.vise else None, l=round(self.litres), j=self.joueur, hs=self.hs, au=self.auto,
+                    ca=round(100 * self.carb / self.carb_max) if self.carb_max else None,
+                    ch=sum(x['n'] for x in self.charge) if self.charge else 0,
                     dir=m.get('dir') if m else None, ax=m.get('axe') if m else None, ci=m.get('cible') if m else None,
                     g=getattr(self, 'groupe', None))

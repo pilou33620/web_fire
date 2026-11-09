@@ -15,8 +15,9 @@ from .evacuation import Evacuation
 from .meteo import Meteo
 from .moyens import Moyen
 
-MOYENS_DEFAUT = dict(ccf=16, bull=2, helico=3, canadair=4, dash=1)
-LIMITES = dict(ccf=(0, 60), bull=(0, 8), helico=(0, 12), canadair=(0, 16), dash=(0, 4))
+MOYENS_DEFAUT = dict(ccf=16, fpt=4, bull=2, debr=1, vpc=1, ravit=1, vsav=3, helico=3, canadair=4, dash=1, dragon=1)
+LIMITES = dict(ccf=(0, 60), fpt=(0, 20), bull=(0, 8), debr=(0, 4), vpc=(0, 3), ravit=(0, 4), vsav=(0, 8),
+               helico=(0, 12), canadair=(0, 16), dash=(0, 4), dragon=(0, 3))
 
 
 class Partie:
@@ -33,6 +34,10 @@ class Partie:
         self.seq = 0
         self.evacues = set()
         self.stats = dict(largages=0, defriche=0, departs=0, renforts=0)
+        self.blesses = []                 # personnes à secourir : {id, cell, n, t (type), g (gravité), etat, quoi, t0}
+        self.n_blesses = 0
+        self.secourus = dict(hopital=0, graves=0, aggraves=0)
+        self.carte_modifiee = set()       # cellules débroussaillées (le combustible a changé)
         self.config_moyens = {k: max(LIMITES[k][0], min(LIMITES[k][1], int(v)))
                               for k, v in {**MOYENS_DEFAUT, **(moyens or {})}.items() if k in LIMITES}
         self.moyens = []
@@ -74,6 +79,93 @@ class Partie:
             self.moyens.append(u)
         for k in range(cm['dash']):
             self.moyens.append(Moyen(len(self.moyens), 'dash', f'Milan {71 + k}', aero, c))
+        csp = cas[0]['cell']
+        for k in range(cm.get('fpt', 0)):
+            self.moyens.append(Moyen(len(self.moyens), 'fpt', f'FPT {k + 1}', cas[k % min(2, len(cas))]['cell'], c))
+        for k in range(cm.get('vpc', 0)):
+            self.moyens.append(Moyen(len(self.moyens), 'vpc', f'PC {k + 1}', csp, c))
+        for k in range(cm.get('debr', 0)):
+            self.moyens.append(Moyen(len(self.moyens), 'debr', f'Débroussailleuse {k + 1}', cas[(k + 1) % len(cas)]['cell'], c))
+        for k in range(cm.get('ravit', 0)):
+            self.moyens.append(Moyen(len(self.moyens), 'ravit', f'Ravitailleur {k + 1}', csp, c))
+        for k in range(cm.get('vsav', 0)):
+            self.moyens.append(Moyen(len(self.moyens), 'vsav', f'VSAV {k + 1}', cas[k % len(cas)]['cell'], c))
+        for k in range(cm.get('dragon', 0)):
+            self.moyens.append(Moyen(len(self.moyens), 'dragon', f'Dragon {33 + k}', heli, c))
+        villes = [s for s in c.sites if s['type'] == 'ville']
+        self.hopital = villes[0]['centre'] if villes else csp
+
+    def nb_kind(self, kind):
+        return sum(1 for u in self.moyens if u.kind == kind and not u.hs)
+
+    # ------------------------------------------------------------------ blessés et secours
+    def ajouter_blesses(self, cell, n, typ, gravite, quoi):
+        if n <= 0:
+            return
+        self.n_blesses += 1
+        self.blesses.append(dict(id=self.n_blesses, cell=cell, n=n, t=typ, g=gravite, etat='attente', quoi=quoi, t0=self.t))
+        self.journal_ajout('alerte', f"🚑 {n} blessé{'s' if n > 1 else ''} à secourir ({quoi}).")
+
+    def blesse(self, bid):
+        return next((b for b in self.blesses if b['id'] == bid), None)
+
+    def deposer(self, u):
+        n = sum(x['n'] for x in u.charge)
+        if n:
+            self.secourus['hopital'] += n
+            self.secourus['graves'] += sum(x['n'] for x in u.charge if x['g'] != 'leger')
+            self.journal_ajout('sauve', f"🏥 {u.nom} dépose {n} blessé{'s' if n > 1 else ''} à l'hôpital.")
+        u.charge = []
+
+    def _logistique(self):
+        """Secours aux blessés (Dragon d'abord pour les graves et les équipages, VSAV sinon) et ravitaillement en gazole.
+        Ces moyens obéissent à la logistique automatique, sauf s'ils sont sous vos ordres."""
+        g, feu = self.carte.g, self.feu
+        for b in self.blesses:
+            if b['etat'] != 'attente':
+                continue
+            attente = self.t - b['t0']
+            if b['g'] == 'danger' and attente > 20:
+                b['g'] = 'grave'
+                self.journal_ajout('alerte', f"⚠ {b['quoi']} : personne n'est venu, {b['n']} blessé{'s' if b['n'] > 1 else ''} grave{'s' if b['n'] > 1 else ''}.")
+            if b['g'] == 'grave' and attente > 80 and not b.get('aggrave'):
+                b['aggrave'] = True
+                self.secourus['aggraves'] += b['n']
+        self.blesses = [b for b in self.blesses if b['etat'] == 'attente' or self.t - b['t0'] < 30]
+        pris = {u.mission['cible'] for u in self.moyens if u.mission and u.mission.get('type') == 'secours'}
+        for b in sorted([b for b in self.blesses if b['etat'] == 'attente'], key=lambda b: (b['g'] == 'leger', b['t0'])):
+            if b['id'] in pris:
+                continue
+            urgent = b['g'] in ('danger', 'grave') or b['t'] == 'equipage'
+            choix = None
+            if urgent or self.nb_kind('vsav') == 0:
+                libres = [u for u in self.moyens if u.kind == 'dragon' and not u.mission and not u.joueur and not u.hs]
+                if libres:
+                    choix = min(libres, key=lambda u: g.distance(u.cell, b['cell']))
+            if choix is None and not (b['t'] == 'equipage' and feu.etat[b['cell']] == BRULE):
+                libres = [u for u in self.moyens if u.kind == 'vsav' and not u.mission and not u.joueur and not u.hs and not u.charge]
+                libres = [u for u in libres if u.chemin_vers(self, b['cell'])]
+                if libres:
+                    choix = min(libres, key=lambda u: g.distance(u.cell, b['cell']))
+            if choix:
+                choix.mission = dict(type='secours', cible=b['id'], poste=b['cell'], label=f"Secours : {b['quoi']}")
+                pris.add(b['id'])
+        # gazole : le ravitailleur va au camion engagé le plus à sec
+        vises = {u.mission['cible'] for u in self.moyens if u.mission and u.mission.get('type') == 'ravitailler'}
+        for r in [u for u in self.moyens if u.kind == 'ravit' and not u.mission and not u.joueur and not u.hs]:
+            besoin = [u for u in self.moyens if u.carb_max and u.kind != 'ravit' and not u.hs and u.id not in vises
+                      and u.carb < 0.35 * u.carb_max and u.cell != u.base]
+            if not besoin:
+                break
+            u = min(besoin, key=lambda u: (u.carb / u.carb_max, g.distance(u.cell, r.cell)))
+            r.mission = dict(type='ravitailler', cible=u.id, poste=u.cell, label=f'Gazole pour {u.nom}')
+            vises.add(u.id)
+        # le ravitailleur suit sa cible si elle bouge
+        for r in self.moyens:
+            if r.kind == 'ravit' and r.mission and r.mission.get('type') == 'ravitailler':
+                u = next((x for x in self.moyens if x.id == r.mission['cible']), None)
+                if u and r.mission['poste'] != u.cell and u.etat not in ('route',):
+                    r.mission['poste'] = u.cell
 
     def demander_renfort(self, nb):
         self.renforts_attente.append((self.t + 45, nb))
@@ -260,6 +352,7 @@ class Partie:
                 self.danger.update(g.voisins(i))
         self.ia.pas()
         self._chefs()
+        self._logistique()
         for u in self.moyens:
             u.pas(self)
         self.evac.pas()
@@ -345,10 +438,16 @@ class Partie:
         ha = feu.surface_ha()
         perdus = sum(s['part'] * c.sites[s['id']]['valeur'] for s in sites)
         pers = self.evac.bilan()
-        score = max(0, round(100 - 12 * math.log10(1 + ha) - perdus * 0.6 - pers['exposes'] / 40 - 4 * self.stats.get('perdus', 0)))
+        attente = sum(b['n'] for b in self.blesses if b['etat'] == 'attente')
+        score = max(0, round(100 - 12 * math.log10(1 + ha) - perdus * 0.6 - pers['exposes'] / 40 - 4 * self.stats.get('perdus', 0)
+                             - 2 * self.secourus['aggraves'] - 0.5 * attente))
         return sites, dict(ha=round(ha, 1), litres=round(feu.litres), litresRetardant=round(feu.litres_ret),
                            largages=self.stats['largages'], departs=self.stats['departs'], renforts=self.stats['renforts'],
                            defriche=self.stats['defriche'], score=score,
+                           blesses=dict(attente=attente, hopital=self.secourus['hopital'], graves=self.secourus['graves'],
+                                        aggraves=self.secourus['aggraves']),
+                           debroussaille=self.stats.get('debroussaille', 0),
+                           pannes=sum(1 for u in self.moyens if u.etat == 'panne'),
                            personnes=pers, perdus=self.stats.get('perdus', 0), autoprotections=self.stats.get('autoprotections', 0),
                            feuxActifs=sum(1 for f in self.ia.feux.values() if f['statut'] not in ('éteint',)),
                            maisons=round(sum(s['part'] * c.sites[s['id']]['pop'] / 3 for s in sites
@@ -370,4 +469,7 @@ class Partie:
             journal=[j for j in self.journal if j['id'] > depuis], evts=[e for e in self.evts if e['id'] > depuis],
             seq=self.seq, doctrine=self.ia.doctrine, commandement=self.ia.mode, evac=self.evac.export(),
             departs=[dict(cell=d['cell'], detecte=d['detecte']) for d in feu.departs],
+            blesses=[dict(id=b['id'], cell=b['cell'], n=b['n'], t=b['t'], g=b['g'], quoi=b['quoi']) for b in self.blesses if b['etat'] == 'attente'],
+            fuelMod={str(i): self.carte.fuel[i] for i in self.carte_modifiee},
+            hopital=self.hopital,
         )

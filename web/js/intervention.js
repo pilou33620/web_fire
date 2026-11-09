@@ -377,11 +377,12 @@ export class Intervention {
   }
   _modele(d) {
     const o = { grp: new THREE.Group(), k: d.k, d };
-    const L = d.k === 'ccf' ? M.ccf(1.5) : d.k === 'bull' ? M.bull(1.5) : d.k === 'vlhr' ? M.vlhr(1.5) : d.k === 'canadair' ? M.canadair(1.6) : d.k === 'dash' ? M.dash(1.6) : null;
+    const L = d.k === 'ccf' ? M.ccf(1.5) : d.k === 'bull' ? M.bull(1.5) : d.k === 'vlhr' ? M.vlhr(1.5) : ['fpt', 'vpc', 'debr', 'ravit', 'vsav'].includes(d.k) ? M[d.k](1.5) : d.k === 'canadair' ? M.canadair(1.6) : d.k === 'dash' ? M.dash(1.6) : null;
     if (L) fige(L, o.grp);
+    if (d.k === 'dragon') { const h = M.helico(1.4, M.COULEURS_DRAGON[1], M.COULEURS_DRAGON[0]); fige(h.L, o.grp); o.rotor = fige(h.R, o.grp); o.rotor.position.y = h.rotorY; }
     if (d.k === 'helico') { const h = M.helico(1.5); fige(h.L, o.grp); o.rotor = fige(h.R, o.grp); o.rotor.position.y = h.rotorY; o.seau = fige(M.seau(1.6), o.grp); }
     if (d.k === 'ccf') { o.gyro = new THREE.Mesh(new THREE.SphereGeometry(0.4, 6, 4), new THREE.MeshBasicMaterial({ color: 0x3b7bff })); o.gyro.position.set(1.7, 2.45, 0); o.grp.add(o.gyro); }
-    if (d.k !== 'ccf' && d.k !== 'bull' && d.k !== 'vlhr') { o.ombre = new THREE.Mesh(new THREE.CircleGeometry(d.k === 'helico' ? 3.5 : 5.5, 16).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0, transparent: true, opacity: 0.22, depthWrite: false })); this.monde.add(o.ombre); }
+    if (!['ccf', 'bull', 'vlhr', 'fpt', 'vpc', 'debr', 'ravit', 'vsav'].includes(d.k)) { o.ombre = new THREE.Mesh(new THREE.CircleGeometry(d.k === 'helico' ? 3.5 : 5.5, 16).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0, transparent: true, opacity: 0.22, depthWrite: false })); this.monde.add(o.ombre); }
     this.monde.add(o.grp);
     return o;
   }
@@ -390,7 +391,7 @@ export class Intervention {
     const lim = (RAY + 1.5) * this.C.hexM;
     for (const d of E.moyens) {
       const dist = Math.hypot(d.x - this.mx0, d.y - this.my0);
-      const garder = dist < lim || (d.k === 'canadair' || d.k === 'dash' || d.k === 'helico') && dist < lim * 2.2;
+      const garder = dist < lim || ['canadair', 'dash', 'helico', 'dragon'].includes(d.k) && dist < lim * 2.2;
       if (!garder) continue;
       vus.add(d.id);
       let o = this.unites.get(d.id);
@@ -399,7 +400,7 @@ export class Intervention {
       o.t0 = now; o.d = d;
       // au poste, un camion se gare dans la partie sûre de son hexagone, côté feu, décalé selon son numéro
       o.off = [0, 0];
-      if ((d.k === 'ccf' || d.k === 'bull' || d.k === 'vlhr') && d.e !== 'route') {
+      if (['ccf', 'bull', 'vlhr', 'fpt', 'vpc', 'debr', 'ravit', 'vsav'].includes(d.k) && d.e !== 'route') {
         const cible = d.a?.c ?? d.c;
         const tl = this.T.filter(t => t.M === d.c && t.st === '.');
         if (tl.length) {
@@ -484,6 +485,12 @@ export class Intervention {
     for (const [k, e] of postes) {
       const [x, z] = this.vers3(...P.versMetres(P.X[e.p], P.Z[e.p]));
       this._etiquette('p' + k, 'strat', `${e.ic} ${UI.esc(e.m)}${e.n > 1 ? ' ×' + e.n : ''}`, x, this.haut.get(e.p) + 8, z);
+    }
+    // blessés à secourir
+    for (const b of E.blesses || []) {
+      if (!this.macro.has(b.cell)) continue;
+      const [x, z] = this.vers3(...P.versMetres(P.X[b.cell], P.Z[b.cell]));
+      this._etiquette('b' + b.id, 'blesse', `🚑 ${b.n} blessé${b.n > 1 ? 's' : ''} · ${UI.esc(b.quoi)}`, x, this.haut.get(b.cell) + 7, z);
     }
     // ligne de retardant
     const ret = E.ret.filter(i => this.macro.has(i));
@@ -574,6 +581,7 @@ export class Intervention {
       const sol = this.hauteurSous(X, Z), act = d.a?.k;
       let y = sol;
       if (d.k === 'helico') y = sol + (d.e === 'au_sol' || d.e === 'dispo' ? 0.5 : act === 'ecope' ? 8 : 24);
+      if (d.k === 'dragon') y = sol + (d.e === 'dispo' ? 0.5 : act === 'treuille' ? 9 : 26);
       if (d.k === 'canadair') y = sol + (d.e === 'au_sol' || d.e === 'dispo' ? 0.5 : act === 'ecope' ? 0.8 : 34);
       if (d.k === 'dash') y = sol + (d.e === 'au_sol' || d.e === 'dispo' ? 0.5 : 40);
       let ry = -cap * Math.PI / 180;
@@ -582,7 +590,7 @@ export class Intervention {
       o.y3 += (y - o.y3) * Math.min(1, dt * 3);
       o.grp.position.set(X, o.y3, Z); o.grp.rotation.y = ry;
       if (o.ombre) { o.ombre.position.set(X, this.hauteurSous(X, Z) + 0.2, Z); o.ombre.visible = o.y3 > sol + 2; }
-      if (o.rotor) { o.rotor.rotation.y += dt * 30; o.seau.visible = o.y3 > sol + 4 && !!d.m; }
+      if (o.rotor) { o.rotor.rotation.y += dt * 30; if (o.seau) o.seau.visible = o.y3 > sol + 4 && !!d.m; }
       if (o.gyro) { o.gyro.visible = d.e !== 'dispo' && !d.hs; o.gyro.material.color.setHex(Math.sin(t * 12 + d.id) > 0 ? 0x3b7bff : 0xbfd4ff); }
       o.pos = [X, o.y3, Z];
       if (d.a?.k === 'autoprotection' && this.gt.length < this.MAXG) for (let k = 0; k < 4; k++) {

@@ -25,10 +25,16 @@ ORDRES_PAR_TYPE = {
     'canadair': {'larguer', 'retour', 'liberer'},
     'dash': {'retardant', 'retour', 'liberer'},
     'vlhr': set(),
+    'fpt': {'proteger', 'arroser', 'poster', 'retour', 'liberer'},
+    'vpc': {'poster', 'retour', 'liberer'},
+    'debr': {'debroussailler', 'poster', 'retour', 'liberer'},
+    'ravit': {'poster', 'retour', 'liberer'},
+    'vsav': {'poster', 'retour', 'liberer'},
+    'dragon': {'retour', 'liberer'},
 }
 NOMS = {'poster': 'Se poster', 'attaquer': 'Attaque', 'defendre': 'Défense', 'surveiller': 'Surveillance', 'larguer': 'Largages',
         'retardant': 'Ligne de retardant', 'pare_feu': 'Pare-feu', 'retour': 'Retour à la base', 'arroser': 'Arrosage orienté',
-        'ligne': "Ligne d'arrêt", 'proteger': 'Protection 360°', 'flanc': 'Attaque de flanc'}
+        'ligne': "Ligne d'arrêt", 'proteger': 'Protection 360°', 'flanc': 'Attaque de flanc', 'debroussailler': 'Débroussaillement'}
 
 
 def _feu_proche(p, cell):
@@ -77,13 +83,13 @@ def direction_defaut(p, cell):
     return round(math.degrees(math.atan2(-vy, -vx)))
 
 
-def _postes_en_ligne(p, poste, d, n):
+def _postes_en_ligne(p, poste, d, n, kind='ccf'):
     """n postes face à la direction d : le poste, puis ses voisins de part et d'autre (une ligne de front)."""
     g = p.carte.g
     cotes = []
     for k in (1, -1, 2, -2):
         j = _decale(g, poste, d + 90 * (1 if k > 0 else -1), abs(k))
-        if j is not None and _accessible(p, j):
+        if j is not None and _accessible(p, j, kind):
             cotes.append(j)
     ordre = [poste] + cotes
     return [ordre[k % len(ordre)] for k in range(n)]
@@ -101,16 +107,24 @@ def planifier(p, ids, ordre, cell=None, cell2=None, d=None):
     if cell is None or not moyens:
         return [], refus + [u.nom for u in moyens]
     f = _feu_proche(p, cell)
-    ccf = [u for u in moyens if u.kind == 'ccf']
-    autres = [u for u in moyens if u.kind != 'ccf']
+    # les engins à lances (CCF, FPT) se commandent ensemble ; chacun cherche un poste qu'il peut atteindre
+    ccf = [u for u in moyens if u.kind in ('ccf', 'fpt')]
+    autres = [u for u in moyens if u.kind not in ('ccf', 'fpt')]
+    if ccf and ordre in ('ligne', 'flanc', 'surveiller', 'attaquer'):
+        refus += [u.nom for u in ccf if u.kind == 'fpt']
+        ccf = [u for u in ccf if u.kind == 'ccf']
     # --- les groupes de camions
     if ccf and ordre in ('arroser', 'flanc'):
-        poste = _poste_sur(p, cell, 'ccf')
-        if poste is None:
-            refus += [u.nom for u in ccf]
-        else:
+        for kind in ('ccf', 'fpt'):
+            sub = [u for u in ccf if u.kind == kind]
+            if not sub:
+                continue
+            poste = _poste_sur(p, cell, kind)
+            if poste is None:
+                refus += [u.nom for u in sub]
+                continue
             dd = direction_defaut(p, poste) if d is None else d
-            for u, q in zip(ccf, _postes_en_ligne(p, poste, dd, len(ccf))):
+            for u, q in zip(sub, _postes_en_ligne(p, poste, dd, len(sub), kind)):
                 plans.append((u, dict(type=ordre, poste=q, dir=round(dd), label=NOMS[ordre] + ' (vos ordres)')))
     elif ccf and ordre == 'ligne':
         fin = cell2 if cell2 is not None else cell
@@ -139,26 +153,33 @@ def planifier(p, ids, ordre, cell=None, cell2=None, d=None):
             sid = min(proches, key=lambda s: g.distance(s['centre'], cell))['id']
         s = c.sites[sid]
         menace = p.evac.menace if hasattr(p, 'evac') else {}
-        cases = [i for i in s['cells'] if _accessible(p, i)] or [s['centre']]
+        cases = [i for i in s['cells'] if _accessible(p, i, 'fpt')] or [s['centre']]
         cases.sort(key=lambda i: (menace.get(i, 1e9), g.distance(i, cell)))
         cases = cases[:3]
         for k, u in enumerate(ccf):
             plans.append((u, dict(type='defense', site=sid, poste=cases[k % len(cases)], label=f"Protection 360° de {s['nom']} (vos ordres)")))
     elif ccf and ordre in ('poster', 'attaquer', 'surveiller'):
-        poste = _poste_sur(p, cell, 'ccf')
-        if poste is None:
-            refus += [u.nom for u in ccf]
-        else:
-            typ = {'poster': 'preposition', 'attaquer': 'attaque', 'surveiller': 'surveillance'}[ordre]
-            for u in ccf:
+        typ = {'poster': 'preposition', 'attaquer': 'attaque', 'surveiller': 'surveillance'}[ordre]
+        for u in ccf:
+            poste = _poste_sur(p, cell, u.kind)
+            if poste is None:
+                refus.append(u.nom)
+            else:
                 plans.append((u, dict(type=typ, poste=poste, label=NOMS[ordre] + ' (vos ordres)')))
     # --- bulldozers et avions
     for u in autres:
         m = None
         if ordre == 'poster':
             poste = _poste_sur(p, cell, u.kind)
-            if poste is not None:
+            if poste is not None and u.kind == 'vpc':
+                m = dict(type='pc', poste=poste, label='Poste de commandement (vos ordres)')
+            elif poste is not None:
                 m = dict(type='preposition', poste=poste, label=NOMS[ordre] + ' (vos ordres)')
+        elif ordre == 'debroussailler':
+            fin = cell2 if cell2 is not None else cell
+            cells = [i for i in g.ligne(cell, fin) if c.fuel[i] in 'PFTJGQ' and c.site_de[i] < 0][:14]
+            if cells:
+                m = dict(type='debroussailler', cells=cells, label=f'Débroussaillement de {len(cells) * 300} m (vos ordres)')
         elif ordre == 'pare_feu':
             fin = cell2 if cell2 is not None else cell
             cells = [i for i in g.ligne(cell, fin) if COMB[c.fuel[i]]['brule'] and c.site_de[i] < 0][:14]

@@ -10,7 +10,7 @@ from jeu.carte import Carte  # noqa: E402
 from jeu.feu import BRULE, BRULE_FINI, INTACT  # noqa: E402
 from jeu.partie import Partie  # noqa: E402
 
-SANS_MOYENS = dict(ccf=0, bull=0, helico=0, canadair=0, dash=0)
+SANS_MOYENS = dict(ccf=0, fpt=0, bull=0, debr=0, vpc=0, ravit=0, vsav=0, helico=0, canadair=0, dash=0, dragon=0)
 
 
 def partie_calme(moyens=None, graine=5, theme='landes'):
@@ -237,6 +237,65 @@ class TestAutoprotection(unittest.TestCase):
         for _ in range(3):
             u._arroser_voisins(p, 0.8)
         self.assertGreaterEqual(u.eau, RESERVE)
+
+
+class TestEngins(unittest.TestCase):
+    def test_dragon_et_vsav_secourent(self):
+        p = partie_calme()
+        g = p.carte.g
+        i0 = cellule_centrale(p)
+        route = next(i for i in range(g.n) if p.carte.route[i] >= 2 and p.carte.site_de[i] < 0)
+        p.ajouter_blesses(i0, 4, 'equipage', 'danger', 'test équipage')
+        p.ajouter_blesses(route, 2, 'pompier', 'leger', 'test léger')
+        for _ in range(3):
+            p.pas()
+        missions = {u.kind: u.mission['type'] for u in p.moyens if u.mission and u.mission.get('type') == 'secours'}
+        self.assertEqual(missions.get('dragon'), 'secours')
+        self.assertEqual(missions.get('vsav'), 'secours')
+        for _ in range(150):
+            p.pas()
+        self.assertEqual(p.secourus['hopital'], 6)
+
+    def test_ravitailleur(self):
+        p = partie_calme()
+        g = p.carte.g
+        u = next(m for m in p.moyens if m.kind == 'ccf')
+        i0 = cellule_centrale(p)
+        p.action(dict(type='ordre', moyens=[u.id], ordre='poster', cell=i0))
+        for _ in range(30):
+            p.pas()
+        u.carb = 0.2 * u.carb_max
+        for _ in range(60):
+            p.pas()
+        self.assertGreater(u.carb, 0.9 * u.carb_max)
+
+    def test_fpt_reste_sur_les_routes(self):
+        from jeu.moyens import vitesse_sol
+        p = partie_calme()
+        c = p.carte
+        piste = next(i for i in range(c.g.n) if c.route[i] == 1)
+        foret = next(i for i in range(c.g.n) if c.route[i] == 0 and c.fuel[i] == 'P' and c.site_de[i] < 0)
+        route = next(i for i in range(c.g.n) if c.route[i] >= 2)
+        self.assertEqual(vitesse_sol('fpt', c, p.feu, piste), 0)
+        self.assertEqual(vitesse_sol('fpt', c, p.feu, foret), 0)
+        self.assertGreater(vitesse_sol('fpt', c, p.feu, route), 2.5)
+
+    def test_debroussaillage_hors_risque_severe(self):
+        p = Partie(3, 'landes', 'calme', premier_feu=False)
+        p.prochain_depart = 10 ** 9
+        for _ in range(240):
+            p.pas()
+        self.assertGreater(p.stats.get('debroussaille', 0), 0)
+        self.assertIn('Y', p.carte.fuel + ['?'] if isinstance(p.carte.fuel, list) else p.carte.fuel)
+
+    def test_poste_de_commandement(self):
+        p = partie_calme(dict(SANS_MOYENS, fpt=0, debr=0, ravit=0, vsav=0, dragon=0, vpc=1))
+        p.action(dict(type='vent', de=90, force=35))
+        i0 = cellule_centrale(p)
+        p.action(dict(type='allumer', cell=i0))
+        for _ in range(150):
+            p.pas()
+        self.assertTrue(any(f.get('pc') for f in p.ia.feux.values()) or any('📡' in j['txt'] for j in p.journal))
 
 
 class TestEvacuation(unittest.TestCase):
