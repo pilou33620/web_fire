@@ -105,6 +105,21 @@ class TestCommandement(unittest.TestCase):
         self.assertGreaterEqual(len(engages), 4)
         self.assertTrue(any('naissant' in j['txt'] for j in p.journal))
 
+    def test_trace_du_largage(self):
+        """L'interface fait tomber l'eau quand l'avion arrive : le trajet exporté passe par le point de largage, à sa minute."""
+        p = Partie(7, 'landes', 'canicule')
+        g, vus = p.carte.g, 0
+        for _ in range(120):
+            p.pas()
+            for e in [e for e in p.evts if e['type'] == 'largage' and e['id'] > vus and e['produit'] == 'eau']:
+                u = next(x for x in p.moyens if x.id == e['moyen'])
+                cx = sum(g.cx[i] for i in e['cells']) / len(e['cells'])
+                cy = sum(g.cy[i] for i in e['cells']) / len(e['cells'])
+                self.assertTrue(any(t == e['t'] and abs(x - cx) < 2 and abs(y - cy) < 2 for t, x, y in u.export()['tr']))
+                return
+            vus = p.seq
+        self.fail('aucun largage')
+
 
 class TestOrdres(unittest.TestCase):
     def test_l_ia_respecte_vos_ordres(self):

@@ -111,12 +111,13 @@ function appliquer(e) {
   E = e;
   for (const [i, f] of Object.entries(e.fuelMod || {})) C.fuel[+i] = f;
   P.majEtat(e);
-  F.maj(e.moyens, now);
-  CV.maj(e.evac?.convois || [], now);
+  F.maj(e.moyens, now, e.meteo.t);
+  CV.maj(e.evac?.convois || [], now, e.meteo.t);
   P.evac = e.evac;
   inter?.majEtat(e, now);
   for (const v of e.evts) {
-    if (v.type === 'largage') { P.largage(v.cells, v.produit, v.kind); inter?.largage(v); }
+    // sur la carte, l'eau tombe quand l'avion arrive à l'écran, pas dès que le moteur annonce le largage
+    if (v.type === 'largage') { F.differer(v.moyen, v.t, () => P.largage(v.cells, v.produit, v.kind)); inter?.largage(v); }
   }
   for (const j of e.journal) {
     journal.push(j);

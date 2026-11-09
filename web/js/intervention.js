@@ -5,7 +5,7 @@
 // le Dash pose sa ligne rouge, le bulldozer ouvre le pare-feu. Des étiquettes montrent la stratégie du commandement.
 import { THREE, SQ3, MAT, CONT, DEGRADE, Camera, put, lot, fige, jeter, cyl, boite, sphere, cone, semer, rnd, entre, hache, clamp, lerp } from './moteur.js';
 import * as M from './modeles.js';
-import { Convois } from './plateau.js';
+import { Convois, trajet, suivre } from './plateau.js';
 import { dessinerVoies } from './voies.js';
 import { eventail } from './commande.js';
 import * as UI from './ui.js';
@@ -249,7 +249,7 @@ export class Intervention {
     const marquer = (X, Z, w) => {
       for (const [dx, dz] of [[0, 0], [w, 0], [-w, 0], [0, w], [0, -w]]) { const t = this.tuileDe(X + dx, Z + dz); if (t) t.voie = true; }
     };
-    dessinerVoies(voies, { s: 1.8, sol, site, pont, route, marquer }, L, D);
+    dessinerVoies(voies, { s: 1.8, sol, site, pont, route, marquer, joint: C.hexM * this.S2 }, L, D);
     fige(L, this.monde, { ombre: false, contour: false }); fige(D, this.monde);
   }
 
@@ -339,7 +339,7 @@ export class Intervention {
     for (const [i, g] of this.bati) { const e = E.etat[i] === 'b' ? 'b' : '.'; if (g.userData.e !== e) this._batiCellule(i, e); }
     this._unites(E, now);
     const lim = (RAY + 1) * C.hexM;
-    this.convois.maj((E.evac?.convois || []).filter(c => Math.hypot(c.x - this.mx0, c.y - this.my0) < lim), now);
+    this.convois.maj((E.evac?.convois || []).filter(c => Math.hypot(c.x - this.mx0, c.y - this.my0) < lim), now, E.meteo.t);
     this._hud(E);
   }
   _arbres() {
@@ -387,7 +387,8 @@ export class Intervention {
     return o;
   }
   _unites(E, now) {
-    const vus = new Set();
+    const vus = new Set(), neuf = E.meteo.t !== this.tU, tPrec = this.tU ?? E.meteo.t;
+    this.tU = E.meteo.t;
     const lim = (RAY + 1.5) * this.C.hexM;
     for (const d of E.moyens) {
       const dist = Math.hypot(d.x - this.mx0, d.y - this.my0);
@@ -395,9 +396,9 @@ export class Intervention {
       if (!garder) continue;
       vus.add(d.id);
       let o = this.unites.get(d.id);
-      if (!o) { o = this._modele(d); this.unites.set(d.id, o); o.x0 = o.x1 = d.x; o.y0 = o.y1 = d.y; o.cap0 = o.cap1 = d.cap; }
-      else { o.x0 = o.xa ?? o.x1; o.y0 = o.ya ?? o.y1; o.cap0 = o.capa ?? o.cap1; o.x1 = d.x; o.y1 = d.y; o.cap1 = d.cap; }
-      o.t0 = now; o.d = d;
+      if (!o) { o = this._modele(d); this.unites.set(d.id, o); o.x0 = o.x1 = d.x; o.y0 = o.y1 = d.y; o.cap0 = o.cap1 = d.cap; o.t0 = now; }
+      else if (neuf) { suivre(o, clamp((now - o.t0) / (this.dureeU || 1000), 0, 1)); trajet(o, d, tPrec, E.meteo.t); o.t0 = now; }
+      o.d = d;
       // au poste, un camion se gare dans la partie sûre de son hexagone, côté feu, décalé selon son numéro
       o.off = [0, 0];
       if (['ccf', 'bull', 'vlhr', 'fpt', 'vpc', 'debr', 'ravit', 'vsav'].includes(d.k) && d.e !== 'route') {
@@ -568,15 +569,16 @@ export class Intervention {
     this._etiquettes();
   }
   _animeUnites(dt, t, now, duree) {
+    this.dureeU = duree;
     // pompiers et lances : refaits quelques fois par seconde
     const refaire = !this.tl || now - this.tl > 150;
     if (refaire) { this.tl = now; while (this.lances.children.length) jeter(this.lances.children[0]); }
     const L = lot();
     for (const o of this.unites.values()) {
       const d = o.d, a = clamp((now - o.t0) / duree, 0, 1);
-      const mx = o.x0 + (o.x1 - o.x0) * a + (o.off?.[0] || 0), my = o.y0 + (o.y1 - o.y0) * a + (o.off?.[1] || 0);
-      const dc = ((o.cap1 - o.cap0 + 540) % 360) - 180, cap = o.cap0 + dc * a;
-      o.xa = o.x0 + (o.x1 - o.x0) * a; o.ya = o.y0 + (o.y1 - o.y0) * a; o.capa = cap;
+      const [px, py, cap] = suivre(o, a);
+      const mx = px + (o.off?.[0] || 0), my = py + (o.off?.[1] || 0);
+      o.xa = px; o.ya = py; o.capa = cap;
       let [X, Z] = this.vers3(mx, my);
       const sol = this.hauteurSous(X, Z), act = d.a?.k;
       let y = sol;

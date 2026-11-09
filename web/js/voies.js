@@ -45,14 +45,37 @@ function jalonner(pts, pas, poser, depart = pas / 2) {
   }
 }
 
+// le lissage arrondit les virages : une voie qui s'embranchait sur un coude s'arrête alors à côté de l'autre.
+// On prolonge chaque bout resté à moins de `joint` d'une autre voie jusqu'au point le plus proche de celle-ci.
+export function raccorder(lignes, joint) {
+  for (const [k, l] of lignes.entries()) {
+    for (const debut of [true, false]) {
+      const e = debut ? l[0] : l[l.length - 1];
+      let best = null, bd = joint;
+      for (const [k2, m] of lignes.entries()) {
+        if (k2 === k) continue;
+        for (let i = 0; i < m.length - 1; i++) {
+          const a = m[i], b = m[i + 1], dx = b[0] - a[0], dz = b[1] - a[1], ll = dx * dx + dz * dz;
+          const u = ll > 0 ? Math.max(0, Math.min(1, ((e[0] - a[0]) * dx + (e[1] - a[1]) * dz) / ll)) : 0;
+          const p = [a[0] + dx * u, a[1] + dz * u], d = Math.hypot(p[0] - e[0], p[1] - e[1]);
+          if (d < bd) { bd = d; best = p; }
+        }
+      }
+      if (best && bd > joint * 0.02) debut ? l.unshift(best) : l.push(best);
+    }
+  }
+}
+
 const COUL = { 3: [0x6f6c67, 0x58472f], 2: [0x88837a, 0x6b5636] };
 
 // voies : [{ n, p: [[x, z], …] }] en coordonnées 3D ; o : { sol(x,z), s (échelle), site(x,z) -> id ou -1, eau(x,z) -> 'R'… , pont(x,z) }
 export function dessinerVoies(voies, o, Lsol, Ldeco) {
   const s = o.s, sd = s * (o.deco ?? 1);
   const barrieres = [], poteaux = [];
-  for (const v of voies) {
-    const brut = lisser(v.p, v.n === 1 ? 1 : 2);
+  const lignes = voies.map(v => lisser(v.p, v.n === 1 ? 1 : 2));
+  if (o.joint) raccorder(lignes, o.joint);
+  for (const [iv, v] of voies.entries()) {
+    const brut = lignes[iv];
     const pts = densifier(brut, 2.2 * s, o.sol, 0.14 * s);
     if (pts.length < 2) continue;
     if (o.marquer) for (const q of pts) o.marquer(q[0], q[2], (v.n >= 2 ? (v.n === 3 ? 1.05 : 0.8) + 0.5 : 0.6) * s);
