@@ -508,13 +508,17 @@ class Commandement:
         return out
 
     # ------------------------------------------------------------------ cibles aériennes (appelées par les avions)
-    def _ligne_en(self, i0, longueur):
-        """Une ligne de cellules combustibles perpendiculaire au vent, centrée sur i0."""
+    def _ligne_en(self, i0, longueur, axe=None):
+        """Une ligne de cellules combustibles centrée sur i0 : le long de l'axe donné (degrés), sinon perpendiculaire au vent."""
         p, g, c = self.p, self.p.carte.g, self.p.carte
-        vx, vy = p.meteo.vers()
+        if axe is None:
+            vx, vy = p.meteo.vers()
+            ux, uy = -vy, vx
+        else:
+            ux, uy = math.cos(math.radians(axe)), math.sin(math.radians(axe))
         out = []
         for k in range(-(longueur // 2), longueur // 2 + 1):
-            j = g.sous(g.cx[i0] - vy * k * g.hex_m, g.cy[i0] + vx * k * g.hex_m)
+            j = g.sous(g.cx[i0] + ux * k * g.hex_m, g.cy[i0] + uy * k * g.hex_m)
             if j is not None and COMB[c.fuel[j]]['brule'] and p.feu.etat[j] != BRULE and j not in out:
                 out.append(j)
         return out
@@ -530,7 +534,8 @@ class Commandement:
             if not COMB[p.carte.fuel[cible]]['brule']:
                 return None
             if u.kind == 'canadair':
-                return self._ligne_en(cible, 3)[:2] or [cible]
+                l = self._ligne_en(cible, 3, m.get('axe'))
+                return sorted(l, key=lambda j: g.distance(j, cible))[:2] or [cible]
             return [cible]
         if not m or 'feu' not in m:
             return None
@@ -578,7 +583,7 @@ class Commandement:
     def ligne_retardant(self, u):
         m = u.mission
         if m and m.get('cible') is not None:
-            return self._ligne_en(m['cible'], 5)
+            return self._ligne_en(m['cible'], 5, m.get('axe'))
         f = self.feux.get(self.racine(m['feu'])) if m else None
         if not f or f['tete'] is None:
             return []

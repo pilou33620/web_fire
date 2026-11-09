@@ -12,13 +12,27 @@ from .hexa import astar
 TYPES = {
     'ccf': dict(nom='CCF', cap=4000, debit=400, terre=True),
     'bull': dict(nom='Bulldozer', cap=0, terre=True),
+    'vlhr': dict(nom='VLHR', cap=0, terre=True),     # véhicule léger hors route du chef de groupe
     'helico': dict(nom='HBE', cap=1200, vitesse=10.0, endurance=150, terre=False),
     'canadair': dict(nom='Canadair', cap=6000, vitesse=16.0, endurance=180, terre=False),
     'dash': dict(nom='Dash 8', cap=10000, vitesse=24.0, endurance=240, terre=False),
 }
 
 
-DELAI = dict(ccf=3, bull=6, helico=7, canadair=14, dash=18)   # minutes entre l'alerte et le départ
+DELAI = dict(ccf=3, bull=6, vlhr=3, helico=7, canadair=14, dash=18)
+CONE = 50          # demi-angle du cône des lances (degrés)
+
+
+def ecart_angle(a, b):
+    return abs((a - b + 180) % 360 - 180)
+
+
+def dans_cone(g, i, j, cone):
+    """La cellule j est-elle dans le cône (direction, demi-angle) vu depuis i ? Sa propre cellule l'est toujours."""
+    if j == i or cone is None or cone[1] >= 180:
+        return True
+    a = math.degrees(math.atan2(g.cy[j] - g.cy[i], g.cx[j] - g.cx[i]))
+    return ecart_angle(a, cone[0]) <= cone[1]   # minutes entre l'alerte et le départ
 
 
 def vitesse_sol(kind, carte, feu, i):
@@ -72,10 +86,22 @@ class Moyen:
     # ------------------------------------------------------------------ déplacement au sol
     def aller(self, p, dest):
         """Calcule un chemin vers dest. Renvoie False si inaccessible."""
-        c, feu = p.carte, p.feu
         if dest == self.cell:
             self.chemin = []
             return True
+        ch = self.chemin_vers(p, dest)
+        if not ch:
+            return False
+        self.chemin = ch[1:]
+        self.avance = 0.0
+        return True
+
+    def chemin_vers(self, p, dest, depart=None):
+        """Le chemin (liste de cellules) jusqu'à dest, sans rien modifier (sert aussi à l'aperçu des ordres)."""
+        c, feu = p.carte, p.feu
+        depart = self.cell if depart is None else depart
+        if dest == depart:
+            return [depart]
 
         danger = p.danger
         etat = feu.etat
@@ -96,12 +122,8 @@ class Moyen:
                 return 1.0 / v + 2.5
             return 1.0 / v
 
-        ch, _ = astar(c.g, self.cell, dest, cout, 0.42)
-        if not ch:
-            return False
-        self.chemin = ch[1:]
-        self.avance = 0.0
-        return True
+        ch, _ = astar(c.g, depart, dest, cout, 0.42)
+        return ch
 
     def facteur_voie(self, p, j):
         """Les malus de la voie empruntée : bouchons et fumée sur les routes, pistes trop étroites pour se croiser."""
@@ -243,6 +265,8 @@ class Moyen:
             return
         if self.kind == 'bull':
             return self._pas_bull(p)
+        if self.kind == 'vlhr':
+            return self._pas_chef(p)
         # ravitaillement en eau
         if self.eau < 350 and self.etat != 'ravitaillement':
             pe = p.point_eau_proche(self.cell)
@@ -267,7 +291,7 @@ class Moyen:
             self.etat = 'route'
             self.avancer_sol(p)
             # sur le trajet, on arrose ce qui est à portée et peu intense
-            if self.chemin and self.eau > 600:
+            if self.chemin and self.eau > 600 and m.get('dir') is None:     # orienté par le joueur : on garde l'eau pour son cône
                 self._arroser_voisins(p, 0.5, debit=200)
             return
         self.etat = 'action'
@@ -294,10 +318,52 @@ class Moyen:
                     self.act = dict(k='surveille')
         elif t == 'preposition':
             self.act = dict(k='attend')
+        elif t in ('arroser', 'flanc'):
+            cone = (m['dir'], CONE)
+            if not self._arroser_voisins(p, 0.8, cone=cone):
+                if not self._noyer_voisins(p, cone):
+                    m['inactif'] = m.get('inactif', 0) + 1
+                    self.act = dict(k='attend', d=m['dir'])
+                    if t == 'flanc' and m['inactif'] >= 2:
+                        from .ordres import suivre_flanc
+                        suivre_flanc(p, self)
+        elif t == 'ligne':
+            cone = (m['dir'], CONE)
+            if not self._arroser_voisins(p, 0.85, cone=cone):
+                self._mouiller(p, cone)
 
-    def _arroser_voisins(self, p, imax, debit=None):
+    def _mouiller(self, p, cone):
+        """Ligne d'arrêt sans flammes à portée : on mouille la végétation devant soi (ligne d'eau)."""
+        feu, g, c = p.feu, p.carte.g, p.carte
+        cands = [j for j in g.voisins(self.cell) if dans_cone(g, self.cell, j, cone) and COMB[c.fuel[j]]['brule']
+                 and feu.etat[j] != BRULE and feu.mouille[j] < 0.6]
+        if not cands or self.eau < 150:
+            self.act = dict(k='attend', d=cone[0])
+            return
+        j = min(cands, key=lambda k: feu.mouille[k])
+        feu.mouille[j] = min(0.6, feu.mouille[j] + 0.05)
+        self.eau -= 120
+        self.litres += 120
+        self.act = dict(k='mouille', c=j, d=cone[0])
+
+    def _pas_chef(self, p):
+        """Le VLHR du chef de groupe suit son groupe et se tient un peu en arrière."""
+        g = p.carte.g
+        poste = self.mission.get('poste')
+        if poste is not None and self.cell != poste:
+            if not self.chemin or self.chemin[-1] != poste:
+                self.aller(p, poste)
+            self.etat = 'route'
+            self.avancer_sol(p)
+            return
+        self.etat = 'action'
+        self.x, self.y = g.cx[self.cell], g.cy[self.cell]
+        self.act = dict(k='commande')
+
+    def _arroser_voisins(self, p, imax, debit=None, cone=None):
         feu, g = p.feu, p.carte.g
-        cands = [j for j in [self.cell] + g.voisins(self.cell) if feu.etat[j] == BRULE and feu.I[j] <= imax]
+        cands = [j for j in [self.cell] + g.voisins(self.cell) if feu.etat[j] == BRULE and feu.I[j] <= imax
+                 and dans_cone(g, self.cell, j, cone)]
         if not cands or self.eau <= 0:
             return False
         j = max(cands, key=lambda k: feu.I[k])
@@ -305,15 +371,15 @@ class Moyen:
         feu.arroser(j, l)
         self.eau -= l
         self.litres += l
-        self.act = dict(k='arrose', c=j)
+        self.act = dict(k='arrose', c=j, d=cone[0] if cone else None)
         if j != self.cell:
             self.cap_deg = math.degrees(math.atan2(g.cy[j] - g.cy[self.cell], g.cx[j] - g.cx[self.cell]))
         return True
 
-    def _noyer_voisins(self, p):
+    def _noyer_voisins(self, p, cone=None):
         feu, g = p.feu, p.carte.g
         for j in [self.cell] + g.voisins(self.cell):
-            if feu.etat[j] == ETEINT:
+            if feu.etat[j] == ETEINT and dans_cone(g, self.cell, j, cone):
                 if feu.noyer(j):
                     self.eau -= 150
                     self.act = dict(k='noie', c=j)
@@ -492,4 +558,5 @@ class Moyen:
                     m=m.get('label') if m else None, mt=m.get('type') if m else None, f=m.get('feu') if m else None,
                     p=m.get('poste') if m else None, a=self.act, c=self.cell, r=self.renfort, ph=self.phase,
                     v=self.vise if self.vise else None, l=round(self.litres), j=self.joueur,
+                    dir=m.get('dir') if m else None, ax=m.get('axe') if m else None, ci=m.get('cible') if m else None,
                     g=getattr(self, 'groupe', None))
