@@ -158,6 +158,17 @@ export function ccf(s = 1) {
   for (const xx of [1.15, -0.2, -1.1]) for (const zz of [-0.62, 0.62]) { const r = cyl(0.36 * s, 0.36 * s, 0.26 * s, 10); r.rotateX(Math.PI / 2); put(L, r, PNEU, xx * s, 0.36 * s, zz * s, 0, 0.06); }
   return L;
 }
+// VLHR du chef de groupe : un petit 4×4 blanc à bande rouge
+export function vlhr(s = 1) {
+  const L = lot();
+  put(L, boite(2.0 * s, 0.75 * s, 1.15 * s), BLANC, 0, 0.75 * s, 0);
+  put(L, boite(1.1 * s, 0.55 * s, 1.05 * s), BLANC, -0.25 * s, 1.35 * s, 0);
+  put(L, boite(0.08, 0.4 * s, 0.95 * s), 0x8fc3e0, 0.32 * s, 1.35 * s, 0, 0, 0);
+  put(L, boite(2.02 * s, 0.16 * s, 1.17 * s), ROUGE, 0, 0.85 * s, 0, 0, 0);
+  put(L, boite(0.35 * s, 0.12 * s, 0.7 * s), 0x2f6fd6, -0.25 * s, 1.68 * s, 0, 0, 0.05);
+  for (const xx of [0.65, -0.65]) for (const zz of [-0.55, 0.55]) { const r = cyl(0.3 * s, 0.3 * s, 0.22 * s, 10); r.rotateX(Math.PI / 2); put(L, r, PNEU, xx * s, 0.3 * s, zz * s, 0, 0.05); }
+  return L;
+}
 export function bull(s = 1) {
   const L = lot();
   put(L, boite(1.9 * s, 0.9 * s, 1.3 * s), JAUNE, -0.1 * s, 0.85 * s, 0);

@@ -355,7 +355,7 @@ export class Flotte {
     // une géométrie par type de moyen, partagée
     this.geo = {};
     const fig = (L) => fige(L);
-    this.geo.ccf = fig(M.ccf(s)); this.geo.bull = fig(M.bull(s));
+    this.geo.ccf = fig(M.ccf(s)); this.geo.bull = fig(M.bull(s)); this.geo.vlhr = fig(M.vlhr(s));
     const h = M.helico(s); this.geo.helico = fig(h.L); this.geo.rotor = fig(h.R); this.rotorY = h.rotorY;
     this.geo.seau = fig(M.seau(s));
     this.geo.canadair = fig(M.canadair(s)); this.geo.dash = fig(M.dash(s));
@@ -370,7 +370,7 @@ export class Flotte {
     o.corps = cloner(this.geo[d.k]); o.grp.add(o.corps);
     if (d.k === 'helico') { o.rotor = cloner(this.geo.rotor); o.rotor.position.y = this.rotorY; o.corps.add(o.rotor); o.seau = cloner(this.geo.seau); o.corps.add(o.seau); }
     if (d.k === 'ccf') { o.gyro = new THREE.Mesh(this.gyroGeo, this.gyro.clone()); o.gyro.position.set(1.15 * this.s, 1.65 * this.s, 0); o.corps.add(o.gyro); }
-    if (d.k !== 'ccf' && d.k !== 'bull') { o.ombre = new THREE.Mesh(this.ombreGeo, this.ombreMat); o.ombre.scale.setScalar(d.k === 'helico' ? 2.2 * this.s : 3.4 * this.s); this.grp.add(o.ombre); }
+    if (d.k !== 'ccf' && d.k !== 'bull' && d.k !== 'vlhr') { o.ombre = new THREE.Mesh(this.ombreGeo, this.ombreMat); o.ombre.scale.setScalar(d.k === 'helico' ? 2.2 * this.s : 3.4 * this.s); this.grp.add(o.ombre); }
     o.grp.scale.setScalar(1);
     this.grp.add(o.grp);
     return o;

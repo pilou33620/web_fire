@@ -7,6 +7,7 @@ import { THREE, SQ3, MAT, CONT, DEGRADE, Camera, put, lot, fige, jeter, cyl, boi
 import * as M from './modeles.js';
 import { Convois } from './plateau.js';
 import { dessinerVoies } from './voies.js';
+import { eventail } from './commande.js';
 import * as UI from './ui.js';
 
 const RAY = 4;            // rayon de la zone, en hexagones de la carte
@@ -31,6 +32,32 @@ export class Intervention {
     this.hud = zone.querySelector('#inter-hud');
     this.hud.addEventListener('click', e => { if (e.target.closest('[data-recentrer]')) this.recentrer(); });
     this.mainCam = null;
+    this.apercu = new THREE.Group(); this.scene.add(this.apercu);
+    this.ray = new THREE.Raycaster(); this.plan = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  }
+
+  // ------------------------------------------------------------------ la vue, pour le geste de commandement (commande.js)
+  _sol(cx, cy) {
+    const r = this.zone.getBoundingClientRect(), v = new THREE.Vector2((cx - r.left) / r.width * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
+    this.ray.setFromCamera(v, this.cam);
+    let y = 0, pt = new THREE.Vector3(), i = -1;
+    for (let k = 0; k < 3; k++) {
+      this.plan.constant = -y; if (!this.ray.ray.intersectPlane(this.plan, pt)) return null;
+      i = this.macroDe(pt.x, pt.z); if (i < 0) return null; y = this.haut.get(i) ?? 0;
+    }
+    return { i, x: pt.x, z: pt.z };
+  }
+  vue() {
+    const P = this.P, self = this;
+    return {
+      cellule: (cx, cy) => { const s = self._sol(cx, cy); return s && self.macro.has(s.i) ? s.i : -1; },
+      sol: (cx, cy) => { const s = self._sol(cx, cy); return s ? [s.x, s.z] : null; },
+      pos: i => { if (i == null || i < 0 || !self.macro?.has(i)) return null; const [x, z] = self.vers3(...P.versMetres(P.X[i], P.Z[i])); return [x, self.haut.get(i) ?? 0, z]; },
+      posM: (mx, my) => { const [x, z] = self.vers3(mx, my); return [x, self.hauteurSous(x, z), z]; },
+      voisins: i => P.voisins(i),
+      get R() { return RM * DIV; }, groupe: self.apercu,
+      ecran: (x, y, z) => { const v = new THREE.Vector3(x, y, z).project(self.cam); if (v.z > 1) return null; return [(v.x + 1) / 2 * self.W, (1 - v.y) / 2 * self.H]; },
+    };
   }
 
   lumiere(ciel, soleil, fond, nuit) {
@@ -350,11 +377,11 @@ export class Intervention {
   }
   _modele(d) {
     const o = { grp: new THREE.Group(), k: d.k, d };
-    const L = d.k === 'ccf' ? M.ccf(1.5) : d.k === 'bull' ? M.bull(1.5) : d.k === 'canadair' ? M.canadair(1.6) : d.k === 'dash' ? M.dash(1.6) : null;
+    const L = d.k === 'ccf' ? M.ccf(1.5) : d.k === 'bull' ? M.bull(1.5) : d.k === 'vlhr' ? M.vlhr(1.5) : d.k === 'canadair' ? M.canadair(1.6) : d.k === 'dash' ? M.dash(1.6) : null;
     if (L) fige(L, o.grp);
     if (d.k === 'helico') { const h = M.helico(1.5); fige(h.L, o.grp); o.rotor = fige(h.R, o.grp); o.rotor.position.y = h.rotorY; o.seau = fige(M.seau(1.6), o.grp); }
     if (d.k === 'ccf') { o.gyro = new THREE.Mesh(new THREE.SphereGeometry(0.4, 6, 4), new THREE.MeshBasicMaterial({ color: 0x3b7bff })); o.gyro.position.set(1.7, 2.45, 0); o.grp.add(o.gyro); }
-    if (d.k !== 'ccf' && d.k !== 'bull') { o.ombre = new THREE.Mesh(new THREE.CircleGeometry(d.k === 'helico' ? 3.5 : 5.5, 16).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0, transparent: true, opacity: 0.22, depthWrite: false })); this.monde.add(o.ombre); }
+    if (d.k !== 'ccf' && d.k !== 'bull' && d.k !== 'vlhr') { o.ombre = new THREE.Mesh(new THREE.CircleGeometry(d.k === 'helico' ? 3.5 : 5.5, 16).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0, transparent: true, opacity: 0.22, depthWrite: false })); this.monde.add(o.ombre); }
     this.monde.add(o.grp);
     return o;
   }
@@ -372,7 +399,7 @@ export class Intervention {
       o.t0 = now; o.d = d;
       // au poste, un camion se gare dans la partie sûre de son hexagone, côté feu, décalé selon son numéro
       o.off = [0, 0];
-      if ((d.k === 'ccf' || d.k === 'bull') && d.e !== 'route') {
+      if ((d.k === 'ccf' || d.k === 'bull' || d.k === 'vlhr') && d.e !== 'route') {
         const cible = d.a?.c ?? d.c;
         const tl = this.T.filter(t => t.M === d.c && t.st === '.');
         if (tl.length) {
@@ -469,11 +496,12 @@ export class Intervention {
     if (this.choisi) { const o = this.unites.get(this.choisi); if (o?.pos) this._etiquette('sel', 'moyen', `${UI.ICONE[o.d.k]} ${UI.esc(o.d.n)} · ${UI.esc(UI.etatMoyen(o.d))}`, o.pos[0], o.pos[1] + 6, o.pos[2]); }
     for (const [k, el] of this.etis) if (!el._vu) { el.remove(); this.etis.delete(k); }
   }
-  tap(cx, cy) {
+  tapMoyen(cx, cy) {
     const r = this.zone.getBoundingClientRect(); let best = null, bd = 30;
     for (const [id, o] of this.unites) { if (!o.pos) continue; const v = new THREE.Vector3(...o.pos).project(this.cam); const d = Math.hypot((v.x + 1) / 2 * this.W + r.left - cx, (1 - v.y) / 2 * this.H + r.top - cy); if (d < bd) { bd = d; best = id; } }
-    this.choisi = best;
+    return best;
   }
+  tap(cx, cy) { this.choisi = this.tapMoyen(cx, cy); return this.choisi; }
 
   // ------------------------------------------------------------------ chaque image
   anime(dt, t, now, duree) {
@@ -557,6 +585,9 @@ export class Intervention {
       if (o.rotor) { o.rotor.rotation.y += dt * 30; o.seau.visible = o.y3 > sol + 4 && !!d.m; }
       if (o.gyro) { o.gyro.visible = d.e !== 'dispo'; o.gyro.material.color.setHex(Math.sin(t * 12 + d.id) > 0 ? 0x3b7bff : 0xbfd4ff); }
       o.pos = [X, o.y3, Z];
+      if (refaire && d.k === 'ccf' && d.dir != null && d.e === 'action') {
+        const m = eventail(RM * DIV * 1.4, d.dir, 50, d.j ? 0.2 : 0.12); m.position.set(X, o.y3 + 0.6, Z); this.lances.add(m);
+      }
       // pompiers et lances
       if (refaire && d.k === 'ccf' && (act === 'arrose' || act === 'protege' || act === 'noie' || act === 'attend' || act === 'surveille') && d.e === 'action') {
         let cible = null;

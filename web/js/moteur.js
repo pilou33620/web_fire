@@ -121,11 +121,15 @@ export class Camera {
     this.ptrs = ptrs;
     el.addEventListener('pointerdown', e => {
       if (this.off) return;
-      el.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); dep0 = { x: e.clientX, y: e.clientY }; glisse = false; vit = { x: 0, z: 0 };
+      try { el.setPointerCapture(e.pointerId); } catch (err) { /* pointeur déjà relâché */ }
+      // geste capturé (ordre en cours : appuyer, glisser pour orienter, relâcher) : la carte ne bouge pas
+      if (ptrs.size === 0 && this.saisie == null && this.onPress?.(e.clientX, e.clientY, e) === true) { this.saisie = e.pointerId; this.elan = null; return; }
+      ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); dep0 = { x: e.clientX, y: e.clientY }; glisse = false; vit = { x: 0, z: 0 };
       if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch0 = Math.hypot(a.x - b.x, a.y - b.y); dist0 = this.dist; }
     });
     el.addEventListener('pointermove', e => {
       if (this.off) return;
+      if (this.saisie === e.pointerId) { this.onDrag?.(e.clientX, e.clientY, e); return; }
       const p = ptrs.get(e.pointerId);
       if (p) {
         if (ptrs.size === 2) { p.x = e.clientX; p.y = e.clientY; const [a, b] = [...ptrs.values()]; this.dist = clamp(dist0 * pinch0 / Math.max(20, Math.hypot(a.x - b.x, a.y - b.y)), this.zmin, this.zmax); this.maj(); glisse = true; return; }
@@ -137,10 +141,11 @@ export class Camera {
         }
         return;
       }
-      if (e.pointerType === 'mouse') this.onHover?.(e.clientX, e.clientY);
+      if (e.pointerType === 'mouse' || e.pointerType === 'pen') this.onHover?.(e.clientX, e.clientY, e);
     });
     const fin = e => {
       if (this.off) { ptrs.delete(e.pointerId); return; }
+      if (this.saisie === e.pointerId) { this.saisie = null; this.onRelease?.(e.clientX, e.clientY, e.type === 'pointercancel'); return; }
       const etait = ptrs.has(e.pointerId); ptrs.delete(e.pointerId); el.classList.remove('glisse');
       if (etait && !glisse && e.type === 'pointerup' && ptrs.size === 0) this.onTap?.(e.clientX, e.clientY);
       if (etait && glisse && ptrs.size === 0 && performance.now() - tAv < 60) this.elan = vit;
