@@ -121,9 +121,11 @@ class Partie:
             retrait = poste
             if d is not None:
                 a = math.radians(d + 180)
-                j = g.sous(g.cx[poste] + math.cos(a) * g.hex_m, g.cy[poste] + math.sin(a) * g.hex_m)
-                if j is not None and self.feu.etat[j] != BRULE and self.carte.fuel[j] not in EAU:
-                    retrait = j
+                for n in (1, 2, 3):                     # en retrait, hors de portée des flammes
+                    j = g.sous(g.cx[poste] + math.cos(a) * g.hex_m * n, g.cy[poste] + math.sin(a) * g.hex_m * n)
+                    if j is not None and self.feu.etat[j] != BRULE and self.carte.fuel[j] not in EAU and j not in self.danger:
+                        retrait = j
+                        break
             lab = l[0].mission.get('label', '')
             if not chef.mission or chef.mission.get('poste') != retrait:
                 chef.mission = dict(type='escorte', poste=retrait, label='Commande : ' + lab)
@@ -343,11 +345,11 @@ class Partie:
         ha = feu.surface_ha()
         perdus = sum(s['part'] * c.sites[s['id']]['valeur'] for s in sites)
         pers = self.evac.bilan()
-        score = max(0, round(100 - 12 * math.log10(1 + ha) - perdus * 0.6 - pers['exposes'] / 40))
+        score = max(0, round(100 - 12 * math.log10(1 + ha) - perdus * 0.6 - pers['exposes'] / 40 - 4 * self.stats.get('perdus', 0)))
         return sites, dict(ha=round(ha, 1), litres=round(feu.litres), litresRetardant=round(feu.litres_ret),
                            largages=self.stats['largages'], departs=self.stats['departs'], renforts=self.stats['renforts'],
                            defriche=self.stats['defriche'], score=score,
-                           personnes=pers,
+                           personnes=pers, perdus=self.stats.get('perdus', 0), autoprotections=self.stats.get('autoprotections', 0),
                            feuxActifs=sum(1 for f in self.ia.feux.values() if f['statut'] not in ('éteint',)),
                            maisons=round(sum(s['part'] * c.sites[s['id']]['pop'] / 3 for s in sites
                                              if c.sites[s['id']]['type'] in ('ville', 'village'))))

@@ -282,7 +282,7 @@ class Commandement:
         g = self.p.carte.g
         out = []
         for u in self.p.moyens:
-            if u.kind != kind or u.joueur:
+            if u.kind != kind or u.joueur or u.hs:
                 continue
             if u.etat == 'au_sol' and not self.p.meteo.vol_possible(kind):
                 continue

@@ -21,6 +21,8 @@ TYPES = {
 
 DELAI = dict(ccf=3, bull=6, vlhr=3, helico=7, canadair=14, dash=18)
 CONE = 50          # demi-angle du cône des lances (degrés)
+RESERVE = 500      # litres gardés pour l'autoprotection : les lances n'y touchent jamais
+DEBIT_AUTO = 120   # litres par minute des rampes d'aspersion quand le camion est encerclé
 
 
 def ecart_angle(a, b):
@@ -82,6 +84,9 @@ class Moyen:
         self.largages = 0
         self.renfort = False
         self.joueur = False               # sous les ordres du joueur : l'IA n'y touche pas
+        self.hs = False                   # hors service (engin perdu dans le feu)
+        self.groupe = None
+        self.auto = False                 # autoprotection en cours
 
     # ------------------------------------------------------------------ déplacement au sol
     def aller(self, p, dest):
@@ -239,16 +244,71 @@ class Moyen:
             self.etat = 'dispo'
 
     # ---------------------------------------------------------------- engins terrestres
-    def _pas_sol(self, p):
+    def _encercle(self, p, i=None):
+        """Le feu est-il sur le camion (sa cellule brûle, ou au moins deux voisines brûlent fort) ?"""
+        feu, g = p.feu, p.carte.g
+        i = self.cell if i is None else i
+        # seul le front compte : un hexagone allumé depuis peu (ensuite, sur la route ou la piste, le combustible
+        # autour du camion est déjà consumé ; il ne reste que des braises)
+        front = lambda j, imin: feu.etat[j] == BRULE and feu.I[j] > imin and p.t - feu.t_ign[j] <= 8
+        if front(i, 0.3):
+            return True
+        return sum(1 for j in g.voisins(i) if front(j, 0.7)) >= 2
+
+    def _securite(self, p):
+        """Repli si c'est possible ; sinon autoprotection (CCF) ; réserve épuisée : l'engin est perdu.
+        Renvoie True si le moyen a passé la minute à se protéger."""
         c, feu, g = p.carte, p.feu, p.carte.g
-        # repli si la cellule s'embrase
-        if feu.etat[self.cell] == BRULE and feu.I[self.cell] > 0.2:
-            sur = [j for j in g.voisins(self.cell) if feu.etat[j] != BRULE and vitesse_sol(self.kind, c, feu, j) > 0]
+        if not self._encercle(p):
+            if self.auto:
+                self.auto = False
+                self.etat = 'route'
+                p.journal_ajout('cos', f"{self.nom} : le front est passé, fin de l'autoprotection ; l'équipage repart faire le plein.")
+            return False
+        if not self.auto:
+            sur = [j for j in g.voisins(self.cell) if feu.etat[j] != BRULE and vitesse_sol(self.kind, c, feu, j) > 0
+                   and not self._encercle(p, j)]
             if sur:
                 sur.sort(key=lambda j: (feu.etat[j] not in (BRULE_FINI, ETEINT, NOYE), -c.route[j]))
                 self.cell = sur[0]
                 self.chemin = []
-                p.journal_ajout('repli', f'{self.nom} se replie : le feu arrive sur sa position.')
+                self.x, self.y = g.cx[self.cell], g.cy[self.cell]
+                if p.t - getattr(self, '_repli_t', -99) > 15:          # une seule annonce par quart d'heure
+                    p.journal_ajout('repli', f'{self.nom} se replie : le feu arrive sur sa position.')
+                self._repli_t = p.t
+                return False
+        # plus d'issue : on reste, l'équipage s'abrite dans la cabine et les rampes d'aspersion arrosent le camion
+        if self.kind == 'ccf' and self.eau > 0:
+            if not self.auto:
+                self.auto = True
+                p.stats['autoprotections'] = p.stats.get('autoprotections', 0) + 1
+                p.journal_ajout('alerte', f"🛡 {self.nom} encerclé par le feu : autoprotection déclenchée, l'équipage est à l'abri dans la cabine.")
+            l = min(self.eau, DEBIT_AUTO)
+            self.eau -= l
+            self.litres += l
+            feu.mouille[self.cell] = min(1.0, feu.mouille[self.cell] + 0.15)
+            self.etat = 'autoprotection'
+            self.chemin = []
+            self.act = dict(k='autoprotection', c=self.cell)
+            return True
+        if self.kind == 'ccf' or feu.etat[self.cell] == BRULE and feu.I[self.cell] > 0.5:
+            self.hs = True
+            self.auto = False
+            self.mission, self.joueur = None, False
+            self.etat = 'hs'
+            p.stats['perdus'] = p.stats.get('perdus', 0) + 1
+            quoi = "réserve d'autoprotection épuisée" if self.kind == 'ccf' else 'pris par les flammes'
+            p.journal_ajout('alerte', f"⚠ {self.nom} perdu ({quoi}) : l'équipage est évacué de justesse, l'engin est hors service.")
+            return True
+        return False
+
+    def _pas_sol(self, p):
+        c, feu, g = p.carte, p.feu, p.carte.g
+        if self.hs:
+            self.etat, self.act = 'hs', dict(k='hs')
+            return
+        if self._securite(p):
+            return
         m = self.mission
         if m is None:
             # pas de mission : retour à la caserne
@@ -268,7 +328,7 @@ class Moyen:
         if self.kind == 'vlhr':
             return self._pas_chef(p)
         # ravitaillement en eau
-        if self.eau < 350 and self.etat != 'ravitaillement':
+        if self.eau < RESERVE + 300 and self.etat != 'ravitaillement':
             pe = p.point_eau_proche(self.cell)
             if pe is not None:
                 if self.cell == pe:
@@ -301,8 +361,9 @@ class Moyen:
             proche = any(feu.etat[j] == BRULE for j in g.anneau(self.cell, 2))
             if proche:
                 if not self._arroser_voisins(p, 1.01):
-                    feu.mouille[self.cell] = min(1.0, feu.mouille[self.cell] + 0.04)
-                    self.eau -= 120
+                    if self.eau > RESERVE + 120:
+                        feu.mouille[self.cell] = min(1.0, feu.mouille[self.cell] + 0.04)
+                        self.eau -= 120
                     self.act = dict(k='protege', c=self.cell)
             else:
                 self.act = dict(k='attend')
@@ -337,7 +398,7 @@ class Moyen:
         feu, g, c = p.feu, p.carte.g, p.carte
         cands = [j for j in g.voisins(self.cell) if dans_cone(g, self.cell, j, cone) and COMB[c.fuel[j]]['brule']
                  and feu.etat[j] != BRULE and feu.mouille[j] < 0.6]
-        if not cands or self.eau < 150:
+        if not cands or self.eau < RESERVE + 150:
             self.act = dict(k='attend', d=cone[0])
             return
         j = min(cands, key=lambda k: feu.mouille[k])
@@ -364,10 +425,10 @@ class Moyen:
         feu, g = p.feu, p.carte.g
         cands = [j for j in [self.cell] + g.voisins(self.cell) if feu.etat[j] == BRULE and feu.I[j] <= imax
                  and dans_cone(g, self.cell, j, cone)]
-        if not cands or self.eau <= 0:
+        if not cands or self.eau <= RESERVE:
             return False
         j = max(cands, key=lambda k: feu.I[k])
-        l = min(self.eau, debit or TYPES['ccf']['debit'])
+        l = min(self.eau - RESERVE, debit or TYPES['ccf']['debit'])
         feu.arroser(j, l)
         self.eau -= l
         self.litres += l
@@ -379,7 +440,7 @@ class Moyen:
     def _noyer_voisins(self, p, cone=None):
         feu, g = p.feu, p.carte.g
         for j in [self.cell] + g.voisins(self.cell):
-            if feu.etat[j] == ETEINT and dans_cone(g, self.cell, j, cone):
+            if feu.etat[j] == ETEINT and dans_cone(g, self.cell, j, cone) and self.eau > RESERVE + 150:
                 if feu.noyer(j):
                     self.eau -= 150
                     self.act = dict(k='noie', c=j)
@@ -557,6 +618,6 @@ class Moyen:
                     e=self.etat, eau=round(100 * self.eau / self.cap) if self.cap else None,
                     m=m.get('label') if m else None, mt=m.get('type') if m else None, f=m.get('feu') if m else None,
                     p=m.get('poste') if m else None, a=self.act, c=self.cell, r=self.renfort, ph=self.phase,
-                    v=self.vise if self.vise else None, l=round(self.litres), j=self.joueur,
+                    v=self.vise if self.vise else None, l=round(self.litres), j=self.joueur, hs=self.hs, au=self.auto,
                     dir=m.get('dir') if m else None, ax=m.get('axe') if m else None, ci=m.get('cible') if m else None,
                     g=getattr(self, 'groupe', None))

@@ -291,6 +291,12 @@ export class Plateau {
       }
     }
   }
+  dome(x, y, z, r) {
+    for (let k = 0; k < 3 && this.gt.length < this.MAXG; k++) {
+      const a = Math.random() * 6.28, v = 2 + Math.random() * 2;
+      this.gt.push({ x, y: y + 1.6, z, vx: Math.cos(a) * r * 1.4, vy: v, vz: Math.sin(a) * r * 1.4, t: 0, vie: 0.7, col: 0xcfeaff, s: 0.55, g: 9 });
+    }
+  }
   jet(x0, y0, z0, i) {
     if (this.gt.length >= this.MAXG) return;
     const x1 = this.X[i] + (Math.random() - 0.5) * 6, z1 = this.Z[i] + (Math.random() - 0.5) * 6, y1 = this.top[i] + 0.5;
@@ -385,7 +391,7 @@ export class Flotte {
       else { o.x0 = o.xa ?? o.x1; o.y0 = o.ya ?? o.y1; o.cap0 = o.capa ?? o.cap1; o.x1 = d.x; o.y1 = d.y; o.cap1 = d.cap; }
       o.t0 = now; o.d = d;
     }
-    for (const [id, o] of this.u) if (!vus.has(id)) { this.grp.remove(o.grp); o.ombre && this.grp.remove(o.ombre); this.u.delete(id); }
+    for (const [id, o] of this.u) if (!vus.has(id)) { this.grp.remove(o.grp); o.ombre && this.grp.remove(o.ombre); o.bulle && this.grp.remove(o.bulle); this.u.delete(id); }
   }
   // position 3D d'un moyen à l'instant présent (interpolée)
   anime(dt, t, now, duree, plateau, jets) {
@@ -410,6 +416,14 @@ export class Flotte {
       if (o.rotor) { o.rotor.rotation.y += dt * (o.y3 > sol + 1.5 ? 28 : 4); o.seau.visible = o.y3 > sol + 3 && !!d.m; }
       if (d.k === 'canadair' || d.k === 'dash') o.corps.rotation.z = o.y3 > sol + 2 ? 0.05 : 0;
       if (o.gyro) { o.gyro.visible = d.e === 'route' || d.e === 'action' || d.e === 'alerte'; o.gyro.material.color.setHex(Math.sin(t * 12 + d.id) > 0 ? 0x3b7bff : 0xbfd4ff); }
+      // autoprotection : les rampes d'aspersion font un dôme d'eau autour du camion ; engin perdu : épave noire
+      if (act === 'autoprotection' && jets && Math.random() < dt * 40) plateau.dome(x, o.y3, z, 2.6 * this.s);
+      if (d.k === 'ccf') {
+        if (!o.bulle) { o.bulle = new THREE.Mesh(new THREE.SphereGeometry(2.4 * this.s, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x6cc0ff, transparent: true, opacity: 0.42, depthWrite: false })); o.bulle.renderOrder = 6; this.grp.add(o.bulle); }
+        o.bulle.visible = act === 'autoprotection';
+        if (o.bulle.visible) { o.bulle.position.set(x, o.y3, z); o.bulle.scale.setScalar(1 + 0.06 * Math.sin(t * 9)); }
+      }
+      if (d.hs && !o.epave) { o.epave = true; const m = new THREE.MeshToonMaterial({ color: 0x2b2622, gradientMap: DEGRADE }); o.corps.traverse(c => { if (c.isMesh && c.material !== CONT) c.material = m; }); if (o.gyro) o.gyro.visible = false; }
       // jets des lances
       if ((act === 'arrose' || act === 'noie') && d.a.c != null && jets && Math.random() < dt * 14) {
         plateau.jet(x + Math.cos(cap * Math.PI / 180) * 0.4, o.y3 + 1.6, z + Math.sin(cap * Math.PI / 180) * 0.4, d.a.c);

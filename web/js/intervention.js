@@ -583,8 +583,17 @@ export class Intervention {
       o.grp.position.set(X, o.y3, Z); o.grp.rotation.y = ry;
       if (o.ombre) { o.ombre.position.set(X, this.hauteurSous(X, Z) + 0.2, Z); o.ombre.visible = o.y3 > sol + 2; }
       if (o.rotor) { o.rotor.rotation.y += dt * 30; o.seau.visible = o.y3 > sol + 4 && !!d.m; }
-      if (o.gyro) { o.gyro.visible = d.e !== 'dispo'; o.gyro.material.color.setHex(Math.sin(t * 12 + d.id) > 0 ? 0x3b7bff : 0xbfd4ff); }
+      if (o.gyro) { o.gyro.visible = d.e !== 'dispo' && !d.hs; o.gyro.material.color.setHex(Math.sin(t * 12 + d.id) > 0 ? 0x3b7bff : 0xbfd4ff); }
       o.pos = [X, o.y3, Z];
+      if (d.a?.k === 'autoprotection' && this.gt.length < this.MAXG) for (let k = 0; k < 4; k++) {
+        const a = Math.random() * 6.28;
+        this.gt.push({ x: X, y: o.y3 + 2.4, z: Z, vx: Math.cos(a) * 5, vy: 3 + Math.random() * 2, vz: Math.sin(a) * 5, t: 0, vie: 0.8, col: 0xcfeaff, s: 0.3, g: 9.8 });
+      }
+      if (d.k === 'ccf') {
+        if (!o.bulle) { o.bulle = new THREE.Mesh(new THREE.SphereGeometry(4.2, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x6cc0ff, transparent: true, opacity: 0.42, depthWrite: false })); o.bulle.renderOrder = 6; o.grp.add(o.bulle); }
+        o.bulle.visible = d.a?.k === 'autoprotection';
+      }
+      if (d.hs && !o.epave) { o.epave = true; const mat = new THREE.MeshToonMaterial({ color: 0x2b2622, gradientMap: DEGRADE }); o.grp.traverse(c => { if (c.isMesh && c.material !== CONT && c !== o.ombre && c !== o.bulle) c.material = mat; }); if (o.gyro) o.gyro.visible = false; }
       if (refaire && d.k === 'ccf' && d.dir != null && d.e === 'action') {
         const m = eventail(RM * DIV * 1.4, d.dir, 50, d.j ? 0.2 : 0.12); m.position.set(X, o.y3 + 0.6, Z); this.lances.add(m);
       }
