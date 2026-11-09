@@ -362,7 +362,9 @@ export class Flotte {
     this.geo = {};
     const fig = (L) => fige(L);
     this.geo.ccf = fig(M.ccf(s)); this.geo.bull = fig(M.bull(s)); this.geo.vlhr = fig(M.vlhr(s));
+    for (const k of ['fpt', 'vpc', 'debr', 'ravit', 'vsav']) this.geo[k] = fig(M[k](s));
     const h = M.helico(s); this.geo.helico = fig(h.L); this.geo.rotor = fig(h.R); this.rotorY = h.rotorY;
+    this.geo.dragon = fig(M.helico(s * 0.9, M.COULEURS_DRAGON[1], M.COULEURS_DRAGON[0]).L);
     this.geo.seau = fig(M.seau(s));
     this.geo.canadair = fig(M.canadair(s)); this.geo.dash = fig(M.dash(s));
     this.ombreMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.22, depthWrite: false });
@@ -374,9 +376,10 @@ export class Flotte {
     const o = { grp: new THREE.Group(), k: d.k };
     const cloner = g => { const c = new THREE.Group(); for (const m of g.children) { const mm = new THREE.Mesh(m.geometry, m.material); mm.castShadow = m.castShadow; c.add(mm); } return c; };
     o.corps = cloner(this.geo[d.k]); o.grp.add(o.corps);
+    if (d.k === 'dragon') { o.rotor = cloner(this.geo.rotor); o.rotor.position.y = this.rotorY * 0.9; o.corps.add(o.rotor); }
     if (d.k === 'helico') { o.rotor = cloner(this.geo.rotor); o.rotor.position.y = this.rotorY; o.corps.add(o.rotor); o.seau = cloner(this.geo.seau); o.corps.add(o.seau); }
     if (d.k === 'ccf') { o.gyro = new THREE.Mesh(this.gyroGeo, this.gyro.clone()); o.gyro.position.set(1.15 * this.s, 1.65 * this.s, 0); o.corps.add(o.gyro); }
-    if (d.k !== 'ccf' && d.k !== 'bull' && d.k !== 'vlhr') { o.ombre = new THREE.Mesh(this.ombreGeo, this.ombreMat); o.ombre.scale.setScalar(d.k === 'helico' ? 2.2 * this.s : 3.4 * this.s); this.grp.add(o.ombre); }
+    if (!['ccf', 'bull', 'vlhr', 'fpt', 'vpc', 'debr', 'ravit', 'vsav'].includes(d.k)) { o.ombre = new THREE.Mesh(this.ombreGeo, this.ombreMat); o.ombre.scale.setScalar(d.k === 'helico' ? 2.2 * this.s : 3.4 * this.s); this.grp.add(o.ombre); }
     o.grp.scale.setScalar(1);
     this.grp.add(o.grp);
     return o;
@@ -392,6 +395,16 @@ export class Flotte {
       o.t0 = now; o.d = d;
     }
     for (const [id, o] of this.u) if (!vus.has(id)) { this.grp.remove(o.grp); o.ombre && this.grp.remove(o.ombre); o.bulle && this.grp.remove(o.bulle); this.u.delete(id); }
+    // les engins garés au même endroit (caserne, aérodrome) se rangent côte à côte au lieu de se superposer
+    const parc = new Map();
+    for (const o of this.u.values()) {
+      o.place = null;
+      const d = o.d; if (!(d.e === 'dispo' || d.e === 'alerte' || d.e === 'au_sol')) continue;
+      const k = d.c + (['helico', 'canadair', 'dash', 'dragon'].includes(d.k) ? 'a' : 's');
+      const n = parc.get(k) || 0; parc.set(k, n + 1);
+      const pas = ['canadair', 'dash'].includes(d.k) ? 9 : 3.6;
+      o.place = [((n % 4) - 1.5) * pas, (Math.floor(n / 4) - 0.5) * pas];
+    }
   }
   // position 3D d'un moyen à l'instant présent (interpolée)
   anime(dt, t, now, duree, plateau, jets) {
@@ -401,11 +414,13 @@ export class Flotte {
       const mx = o.x0 + (o.x1 - o.x0) * a, my = o.y0 + (o.y1 - o.y0) * a;
       let dc = ((o.cap1 - o.cap0 + 540) % 360) - 180; const cap = o.cap0 + dc * a;
       o.xa = mx; o.ya = my; o.capa = cap;
-      const [x, z] = P.vers3D(mx, my);
+      let [x, z] = P.vers3D(mx, my);
+      if (o.place) { x += o.place[0]; z += o.place[1]; }
       const i = P.cellule(x, z), sol = i >= 0 ? Math.max(P.top[i], -0.9) : 0;
       let y = sol, inc = 0;
       const act = d.a?.k;
       if (d.k === 'helico') y = sol + (d.e === 'au_sol' || d.e === 'dispo' || act === 'au_sol' ? 0.9 : act === 'ecope' ? 4.5 : 10);
+      if (d.k === 'dragon') y = sol + (d.e === 'dispo' || act === 'au_sol' ? 0.9 : act === 'treuille' ? 5 : 12);
       if (d.k === 'canadair') { y = sol + (d.e === 'au_sol' || d.e === 'dispo' || act === 'au_sol' ? 0.9 : act === 'ecope' ? 0.4 : act === 'largue' ? 6 : 15); inc = act === 'ecope' ? 0 : 0; }
       if (d.k === 'dash') y = sol + (d.e === 'au_sol' || d.e === 'dispo' || act === 'au_sol' || act === 'remplit' ? 0.9 : 18);
       if (o.y3 === undefined) o.y3 = y;
@@ -413,7 +428,7 @@ export class Flotte {
       o.grp.position.set(x, o.y3, z);
       o.grp.rotation.y = -cap * Math.PI / 180;
       if (o.ombre) { o.ombre.position.set(x, sol + 0.2, z); o.ombre.visible = o.y3 > sol + 1.5; }
-      if (o.rotor) { o.rotor.rotation.y += dt * (o.y3 > sol + 1.5 ? 28 : 4); o.seau.visible = o.y3 > sol + 3 && !!d.m; }
+      if (o.rotor) { o.rotor.rotation.y += dt * (o.y3 > sol + 1.5 ? 28 : 4); if (o.seau) o.seau.visible = o.y3 > sol + 3 && !!d.m; }
       if (d.k === 'canadair' || d.k === 'dash') o.corps.rotation.z = o.y3 > sol + 2 ? 0.05 : 0;
       if (o.gyro) { o.gyro.visible = d.e === 'route' || d.e === 'action' || d.e === 'alerte'; o.gyro.material.color.setHex(Math.sin(t * 12 + d.id) > 0 ? 0x3b7bff : 0xbfd4ff); }
       // autoprotection : les rampes d'aspersion font un dôme d'eau autour du camion ; engin perdu : épave noire

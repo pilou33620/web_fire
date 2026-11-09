@@ -177,12 +177,12 @@ export function bull(s = 1) {
   put(L, boite(0.18 * s, 0.75 * s, 1.9 * s), 0x5b5b5b, 1.25 * s, 0.45 * s, 0, 0, 0.08);   // lame
   return L;
 }
-export function helico(s = 1) {
+export function helico(s = 1, coul = ROUGE, bande = BLANC) {
   const L = lot(), R = lot();
-  const c = sphere(0.95 * s, 1); c.scale(1.5, 0.95, 0.9); put(L, c, ROUGE, 0.2 * s, 0, 0);
-  put(L, boite(0.9 * s, 0.25 * s, 0.95 * s), BLANC, 0.2 * s, -0.15 * s, 0, 0, 0.06);
+  const c = sphere(0.95 * s, 1); c.scale(1.5, 0.95, 0.9); put(L, c, coul, 0.2 * s, 0, 0);
+  put(L, boite(0.9 * s, 0.25 * s, 0.95 * s), bande, 0.2 * s, -0.15 * s, 0, 0, 0.06);
   const v = sphere(0.55 * s, 1); v.scale(1, 0.8, 1.2); put(L, v, 0x8fc3e0, 1.25 * s, 0.15 * s, 0, 0, 0.06);
-  put(L, boite(2.4 * s, 0.25 * s, 0.25 * s), ROUGE, -1.7 * s, 0.25 * s, 0, 0, 0.06);
+  put(L, boite(2.4 * s, 0.25 * s, 0.25 * s), coul, -1.7 * s, 0.25 * s, 0, 0, 0.06);
   put(L, boite(0.4 * s, 0.9 * s, 0.1 * s), JAUNE, -2.85 * s, 0.6 * s, 0, 0, 0.05);
   for (const zz of [-0.7, 0.7]) put(L, boite(2.2 * s, 0.1 * s, 0.1 * s), 0x3a3a3a, 0.2 * s, -0.95 * s, zz * s, 0, 0.04);
   put(L, cyl(0.12 * s, 0.12 * s, 0.4 * s, 6), 0x3a3a3a, 0.2 * s, 0.95 * s, 0, 0, 0.04);
@@ -228,3 +228,63 @@ export function pompier(L, x, y, z, ry, s = 1) {
   put(L, sphere(0.16 * s, 0), 0xe8b896, x, y + 1.42 * s, z, 0, 0.04);
   put(L, sphere(0.19 * s, 0), 0xf2c230, x, y + 1.52 * s, z, 0, 0.04);
 }
+
+// ------------------------------------------------------------------ engins de soutien
+const roues = (L, s, xs, zz = 0.62, r = 0.34) => { for (const xx of xs) for (const z of [-zz, zz]) { const g = cyl(r * s, r * s, 0.24 * s, 10); g.rotateX(Math.PI / 2); put(L, g, PNEU, xx * s, r * s, z * s, 0, 0.05); } };
+// fourgon pompe-tonne : plus court, plus haut, échelle sur le toit
+export function fpt(s = 1) {
+  const L = lot();
+  put(L, boite(1.0 * s, 1.2 * s, 1.35 * s), ROUGE, 1.05 * s, 0.9 * s, 0);
+  put(L, boite(0.08, 0.5 * s, 1.2 * s), 0x8fc3e0, 1.56 * s, 1.1 * s, 0, 0, 0);
+  put(L, boite(1.9 * s, 1.35 * s, 1.4 * s), ROUGE, -0.45 * s, 0.98 * s, 0);
+  put(L, boite(1.92 * s, 0.14 * s, 1.42 * s), 0xf2c230, -0.45 * s, 0.75 * s, 0, 0, 0);
+  for (const z of [-0.4, 0.4]) put(L, boite(1.9 * s, 0.08 * s, 0.1 * s), 0xcfcfcf, -0.4 * s, 1.75 * s, z * s, 0, 0.04);
+  put(L, boite(0.35 * s, 0.14 * s, 0.9 * s), 0x2f6fd6, 1.05 * s, 1.58 * s, 0, 0, 0.06);
+  roues(L, s, [1.0, -0.9]);
+  return L;
+}
+// poste de commandement : grand fourgon blanc, mât et antennes
+export function vpc(s = 1) {
+  const L = lot();
+  put(L, boite(3.0 * s, 1.5 * s, 1.45 * s), BLANC, 0, 1.05 * s, 0);
+  put(L, boite(3.02 * s, 0.22 * s, 1.47 * s), ROUGE, 0, 0.75 * s, 0, 0, 0);
+  put(L, boite(0.08, 0.5 * s, 1.25 * s), 0x8fc3e0, 1.52 * s, 1.35 * s, 0, 0, 0);
+  put(L, cyl(0.06 * s, 0.08 * s, 2.6 * s, 6), 0x9a9a9a, -0.8 * s, 3.1 * s, 0, 0, 0.04);
+  put(L, sphere(0.35 * s, 0), 0xe8e8e8, -0.8 * s, 4.4 * s, 0, 0, 0.05);
+  put(L, cyl(0.45 * s, 0.45 * s, 0.08 * s, 10), 0xdedede, 0.6 * s, 1.9 * s, 0, 0, 0.04);
+  put(L, boite(0.4 * s, 0.12 * s, 0.8 * s), 0x2f6fd6, 1.0 * s, 1.86 * s, 0, 0, 0.05);
+  roues(L, s, [1.0, -1.0]);
+  return L;
+}
+// débroussailleuse : tracteur vert et son broyeur à l'avant
+export function debr(s = 1) {
+  const L = lot();
+  put(L, boite(1.4 * s, 0.8 * s, 1.1 * s), 0x3f8f3a, -0.1 * s, 0.9 * s, 0);
+  put(L, boite(0.8 * s, 0.75 * s, 0.9 * s), 0x3f8f3a, -0.35 * s, 1.65 * s, 0); put(L, boite(0.6 * s, 0.5 * s, 0.85 * s), 0x8fc3e0, -0.35 * s, 1.68 * s, 0, 0, 0);
+  for (const z of [-0.55, 0.55]) { const g = cyl(0.55 * s, 0.55 * s, 0.35 * s, 10); g.rotateX(Math.PI / 2); put(L, g, PNEU, -0.6 * s, 0.55 * s, z * s, 0, 0.05); }
+  for (const z of [-0.5, 0.5]) { const g = cyl(0.32 * s, 0.32 * s, 0.25 * s, 10); g.rotateX(Math.PI / 2); put(L, g, PNEU, 0.55 * s, 0.32 * s, z * s, 0, 0.05); }
+  const b = cyl(0.3 * s, 0.3 * s, 1.6 * s, 10); b.rotateX(Math.PI / 2); put(L, b, 0xe08a1a, 1.25 * s, 0.35 * s, 0, 0, 0.06);
+  put(L, boite(0.5 * s, 0.12 * s, 0.2 * s), 0x5b5b5b, 0.9 * s, 0.55 * s, 0, 0, 0.04);
+  return L;
+}
+// ravitailleur : citerne de gazole blanche, bande jaune
+export function ravit(s = 1) {
+  const L = lot();
+  put(L, boite(1.0 * s, 1.1 * s, 1.3 * s), ROUGE, 1.2 * s, 0.85 * s, 0);
+  const c = cyl(0.62 * s, 0.62 * s, 2.3 * s, 12); c.rotateZ(Math.PI / 2); put(L, c, BLANC, -0.6 * s, 1.05 * s, 0);
+  const b = cyl(0.64 * s, 0.64 * s, 0.25 * s, 12); b.rotateZ(Math.PI / 2); put(L, b, JAUNE, -0.6 * s, 1.05 * s, 0, 0, 0);
+  roues(L, s, [1.2, -0.3, -1.2]);
+  return L;
+}
+// VSAV : ambulance rouge à bande blanche, croix
+export function vsav(s = 1) {
+  const L = lot();
+  put(L, boite(2.6 * s, 1.35 * s, 1.3 * s), ROUGE, -0.1 * s, 0.95 * s, 0);
+  put(L, boite(2.62 * s, 0.2 * s, 1.32 * s), BLANC, -0.1 * s, 0.85 * s, 0, 0, 0);
+  put(L, boite(0.08, 0.45 * s, 1.15 * s), 0x8fc3e0, 1.22 * s, 1.25 * s, 0, 0, 0);
+  put(L, boite(0.7 * s, 0.06 * s, 0.22 * s), BLANC, -0.4 * s, 1.66 * s, 0, 0, 0); put(L, boite(0.22 * s, 0.06 * s, 0.7 * s), BLANC, -0.4 * s, 1.66 * s, 0, 0, 0);
+  put(L, boite(0.35 * s, 0.12 * s, 0.8 * s), 0x2f6fd6, 0.9 * s, 1.7 * s, 0, 0, 0.05);
+  roues(L, s, [0.85, -0.9], 0.58, 0.3);
+  return L;
+}
+export const COULEURS_DRAGON = [0xd8232a, 0xf2c230];

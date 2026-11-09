@@ -59,6 +59,20 @@ Dans les Landes, les pistes forment le quadrillage DFCI ; en Méditerranée, ell
 vers les routes. Le tracé est nettoyé à la génération : routes qui tournent peu, sans escaliers ni doublons, rien de
 construit ni de planté sur l'emprise des voies.
 
+## Les engins de soutien
+
+- 🚒 **Fourgon pompe-tonne (FPT)** : 3 000 L, lance de 500 L/min, rapide mais seulement sur les routes et dans les
+  villages ; spécialiste de la défense des maisons (l'IA l'envoie en premier, il compte pour 1,5 camion).
+- 📡 **Poste de commandement (VPC)** : posé en retrait d'un feu de plus de 20 ha (5 min d'installation), il affiche la
+  prévision du feu, rend le commandement plus réactif (décisions chaque minute) et améliore les lances de 20 %.
+- 🌿 **Débroussailleuse** : broie le sous-bois (« forêt débroussaillée », qui brûle bien moins fort). Hors risque
+  sévère, l'IA dégage les abords des villages et des campings ; par risque sévère, les travaux sont interdits.
+- ⛽ **Ravitailleur** : les engins ont du gazole (10 h de travail environ) ; il va faire le plein de ceux qui sont à sec.
+  Sans ravitailleur, ils rentrent à la caserne ; à zéro, c'est la panne sèche.
+- 🚑 **VSAV** et 🚁 **Dragon** : les blessés (pompiers, équipages d'engins perdus, civils des convois pris par le feu)
+  attendent des secours. Le Dragon hélitreuille les graves et les équipages en danger, de jour comme de nuit ; le
+  VSAV prend les autres par la route ; tous vont à l'hôpital. Un équipage non secouru en 20 min devient blessé grave.
+
 ## Commander au geste : sections et cônes
 
 Les camions vont par **groupe (GIFF)** : 4 CCF et le VLHR du chef de groupe, qui suit et se tient en retrait.

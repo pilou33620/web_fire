@@ -1,8 +1,10 @@
 // Le panneau de droite : situation (météo, bilan, feux), moyens, journal du commandement, réglages de la partie.
 export const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 export const nf = n => Math.round(n).toLocaleString('fr-FR');
-export const ICONE = { ccf: '🚒', vlhr: '🚙', bull: '🚜', helico: '🚁', canadair: '🛩', dash: '✈️' };
-export const NOM_TYPE = { ccf: 'Camions-citernes feux de forêt', vlhr: 'Chefs de groupe (VLHR)', bull: 'Bulldozers', helico: 'Hélicoptères bombardiers d\'eau', canadair: 'Canadair', dash: 'Dash 8 (retardant)' };
+export const ICONE = { ccf: '🚒', vlhr: '🚙', fpt: '🚒', vpc: '📡', bull: '🚜', debr: '🌿', ravit: '⛽', vsav: '🚑', helico: '🚁', canadair: '🛩', dash: '✈️', dragon: '🚁' };
+export const ORDRE_TYPES = ['ccf', 'vlhr', 'fpt', 'vpc', 'bull', 'debr', 'ravit', 'vsav', 'helico', 'canadair', 'dash', 'dragon'];
+export const NOM_TYPE = { ccf: 'Camions-citernes feux de forêt', vlhr: 'Chefs de groupe (VLHR)', fpt: 'Fourgons pompe-tonnes (maisons)', vpc: 'Postes de commandement',
+  debr: 'Débroussailleuses', ravit: 'Ravitailleurs en gazole', vsav: 'Ambulances (VSAV)', dragon: 'Hélicoptères de secours (Dragon)', bull: 'Bulldozers', helico: 'Hélicoptères bombardiers d\'eau', canadair: 'Canadair', dash: 'Dash 8 (retardant)' };
 const RISQUE_COUL = { Faible: '#7be08a', 'Léger': '#b9e07b', 'Modéré': '#ffd34d', 'Sévère': '#ff9a3c', 'Très sévère': '#ff6a3a', Exceptionnel: '#e0403a' };
 export const risqueCouleur = n => RISQUE_COUL[n] || '#ffc94d';
 const STATUT = { 'non détecté': ['#d7c9b4', 'Non détecté'], naissant: ['#ffb02e', 'Naissant'], 'en progression': ['#ff6a3a', 'En progression'], 'fixé': ['#ffd34d', 'Fixé'], 'maîtrisé': ['#7be08a', 'Maîtrisé'], 'éteint': ['#9aa39a', 'Éteint'] };
@@ -18,11 +20,17 @@ export const ORDRES = {
   surveiller: ['👁', 'Surveiller ici', 1, 'Touchez la lisière à surveiller et noyer.'],
   larguer: ['💧', 'Larguer (axe)', 2, 'Appuyez sur le point de largage, glissez pour orienter l\'axe de la passe, relâchez.'],
   retardant: ['🟥', 'Ligne de retardant', 2, 'Appuyez au milieu de la ligne, glissez pour l\'orienter, relâchez.'],
+  debroussailler: ['🌿', 'Débroussailler', 2, 'Appuyez au début de la bande à débroussailler, glissez jusqu\'à sa fin, relâchez.'],
   pare_feu: ['🚧', 'Pare-feu', 2, 'Appuyez au début du pare-feu, glissez jusqu\'à sa fin, relâchez.'],
   retour: ['↩', 'Retour à la base', 0, ''], liberer: ['🤖', 'Rendre à l\'IA', 0, ''],
 };
-export const ORDRES_TYPE = { ccf: ['arroser', 'ligne', 'proteger', 'flanc', 'poster', 'surveiller'], vlhr: [], bull: ['poster', 'pare_feu'], helico: ['larguer'], canadair: ['larguer'], dash: ['retardant'] };
-export const ORDRE_DEFAUT = { ccf: 'arroser', vlhr: 'arroser', bull: 'pare_feu', helico: 'larguer', canadair: 'larguer', dash: 'retardant' };
+export const ORDRES_TYPE = { ccf: ['arroser', 'ligne', 'proteger', 'flanc', 'poster', 'surveiller'], vlhr: [], fpt: ['proteger', 'arroser', 'poster'],
+  vpc: ['poster'], bull: ['poster', 'pare_feu'], debr: ['debroussailler', 'poster'], ravit: ['poster'], vsav: ['poster'], helico: ['larguer'], canadair: ['larguer'], dash: ['retardant'], dragon: [] };
+export const ORDRE_DEFAUT = { ccf: 'arroser', vlhr: 'arroser', fpt: 'proteger', vpc: 'poster', bull: 'pare_feu', debr: 'debroussailler', helico: 'larguer', canadair: 'larguer', dash: 'retardant' };
+const LOGISTIQUE = { ravit: 'Logistique automatique : il va faire le plein des engins à sec. Posté par vous, il ravitaille ceux qui passent à côté.',
+  vsav: 'Logistique automatique : il prend en charge les blessés accessibles par la route et les conduit à l\'hôpital.',
+  dragon: 'Logistique automatique : hélitreuillage des équipages en danger et des blessés graves, de jour comme de nuit.',
+  vpc: 'Posé près d\'un feu (5 min) : prévision du feu affichée, commandement plus réactif, lances +20 % sur ce feu.' };
 const EVAC = { normal: '', evacuation: 'évacuation en cours', confinement: 'à l\'abri sur place', evacue: 'évacué' };
 export function boutonsOrdres(kinds, ids, arme) {
   const l = [...new Set(kinds.flatMap(k => ORDRES_TYPE[k]))].concat(['retour', 'liberer']);
@@ -44,7 +52,9 @@ export function etatMoyen(d) {
   const A = { arrose: 'arrose le feu', noie: 'noie les lisières', protege: 'protège les maisons', remplit: 'fait le plein d\'eau', va_remplir: 'va remplir sa citerne',
     ecope: d.k === 'canadair' ? 'écope' : 'puise de l\'eau', largue: 'largue !', vol: 'en vol', au_sol: 'au sol', defriche: 'ouvre le pare-feu', attend: 'en position',
     surveille: 'surveille', patrouille: 'patrouille', mouille: 'mouille devant la ligne', commande: 'commande le groupe',
-    autoprotection: '🛡 autoprotection : équipage à l\'abri', hs: '⚠ hors service (perdu)', alerte: d.k === 'ccf' || d.k === 'bull' ? 'départ de la caserne' : 'décollage' };
+    autoprotection: '🛡 autoprotection : équipage à l\'abri', hs: '⚠ hors service (perdu)',
+    deploie: 'déploie le poste de commandement', pc: '📡 poste de commandement en place', ravitaille: 'fait le plein de gazole d\'un engin',
+    soigne: 'soigne les blessés', treuille: 'hélitreuillage', debroussaille: 'débroussaille', panne: '⛽ panne sèche', alerte: d.k === 'ccf' || d.k === 'bull' ? 'départ de la caserne' : 'décollage' };
   if (a && A[a]) return A[a];
   if (d.hs) return '⚠ hors service (perdu)';
   return { dispo: 'disponible', route: 'en route', action: 'en action', ravitaillement: 'ravitaillement', au_sol: 'au sol', retour: 'retour à la base', alerte: 'alerte' }[d.e] || d.e;
@@ -59,7 +69,7 @@ function carteFeu(f, C, sel, E) {
   const moy = Object.entries(f.moyens).map(([k, n]) => `${ICONE[k]} ${n}`).join('  ');
   return `<div class="carte-feu ${sel ? 'choisi' : ''}" data-feu="${f.id}">
     <div class="tete"><b>${esc(f.nom)}</b><span class="ha">${nf(f.ha)} ha</span></div>
-    <div class="chips"><span class="chip"><i style="background:${col}"></i>${lib}</span>${f.vitesse ? `<span class="chip">tête ${String(f.vitesse).replace('.', ',')} km/h</span>` : ''}${f.sautes ? `<span class="chip chaud">${f.sautes} saute${f.sautes > 1 ? 's' : ''}</span>` : ''}${moy ? `<span class="chip">${moy}</span>` : ''}</div>
+    <div class="chips"><span class="chip"><i style="background:${col}"></i>${lib}</span>${f.vitesse ? `<span class="chip">tête ${String(f.vitesse).replace('.', ',')} km/h</span>` : ''}${f.sautes ? `<span class="chip chaud">${f.sautes} saute${f.sautes > 1 ? 's' : ''}</span>` : ''}${f.pc ? '<span class="chip ok">📡 PC posé</span>' : ''}${moy ? `<span class="chip">${moy}</span>` : ''}</div>
     ${f.strategie ? `<div class="strat">🧭 ${esc(f.strategie)}</div>` : ''}
     ${menaces ? `<ul>${menaces}</ul>` : ''}
     <div class="bas"><button type="button" class="btn prim" data-inter="${f.id}">🔍 Voir l'intervention</button><button type="button" class="btn" data-centrer="${f.id}">Centrer</button></div>
@@ -95,6 +105,9 @@ export function situation(E, C, sel, mode, raison) {
     <dt>Personnes évacuées</dt><dd>${nf(st.personnes.evacues)}</dd><dt>À l'abri sur place</dt><dd>${nf(st.personnes.confines)}</dd>
     <dt>Sur les routes</dt><dd>${nf(st.personnes.route)}</dd><dt>Personnes exposées au feu</dt><dd style="color:${st.personnes.exposes ? 'var(--rouge)' : 'inherit'}">${nf(st.personnes.exposes)}</dd>
     <dt>Habitations détruites (est.)</dt><dd>${nf(st.maisons)}</dd>
+    <dt>Blessés à l'hôpital</dt><dd>${st.blesses?.hopital || 0}</dd><dt>Blessés en attente de secours</dt><dd style="color:${st.blesses?.attente ? 'var(--rouge)' : 'inherit'}">${st.blesses?.attente || 0}</dd>
+    ${st.blesses?.aggraves ? `<dt>États aggravés (secours trop tardifs)</dt><dd style="color:var(--rouge)">${st.blesses.aggraves}</dd>` : ''}
+    <dt>Hexagones débroussaillés</dt><dd>${st.debroussaille || 0}</dd>${st.pannes ? `<dt>Engins en panne sèche</dt><dd style="color:var(--rouge)">${st.pannes}</dd>` : ''}
     <dt>Autoprotections déclenchées</dt><dd>${st.autoprotections || 0}</dd><dt>Engins perdus</dt><dd style="color:${st.perdus ? 'var(--rouge)' : 'inherit'}">${st.perdus || 0}</dd><dt>Note du commandement</dt><dd style="color:var(--or)">${st.score} / 100</dd></dl>`;
   const touches = E.sites.filter(s => s.etat !== 'sauf');
   h += `<h3>Points sensibles</h3><div class="chips">` + C.sites.filter(s => s.type !== 'reserve').map(s => {
@@ -122,7 +135,9 @@ export function ficheMoyen(d, C, E) {
   const f = d.f != null ? E.feux.find(x => x.id === d.f) : null;
   return `<div class="carte-feu choisi fiche"><div class="tete"><b>${ICONE[d.k]} ${esc(d.n)}</b><span class="sous">${d.j ? '🧑‍🚒 vos ordres' : '🤖 IA'}${d.r ? ' · renfort' : ''}</span></div>
     <div class="chips"><span class="chip ${d.hs || d.au ? 'chaud' : ''}">${esc(etatMoyen(d))}</span>${d.eau != null ? `<span class="chip">💧 ${d.eau} %</span>` : ''}${d.m ? `<span class="chip">${esc(d.m)}</span>` : ''}</div>
-    <dl class="lignes">${f ? `<dt>Feu</dt><dd>${esc(f.nom)}</dd>` : ''}${d.k === 'ccf' ? `<dt>Réserve d'autoprotection</dt><dd>${d.au ? 'en cours d\'utilisation' : '500 L (intouchable par les lances)'}</dd>` : ''}${d.g ? `<dt>Groupe</dt><dd>${esc(d.g)} <button type="button" class="mini" data-groupe="${esc(d.g)}">choisir le groupe</button></dd>` : ''}<dt>Eau projetée</dt><dd>${nf(d.l / 1000)} m³</dd></dl>
+    ${d.ca != null || d.ch ? `<div class="chips">${d.ca != null ? `<span class="chip ${d.ca < 15 ? 'chaud' : ''}">⛽ gazole ${d.ca} %</span>` : ''}${d.ch ? `<span class="chip">🚑 ${d.ch} blessé${d.ch > 1 ? 's' : ''} à bord</span>` : ''}</div>` : ''}
+    ${LOGISTIQUE[d.k] ? `<p class="note">${esc(LOGISTIQUE[d.k])}</p>` : ''}
+    <dl class="lignes">${f ? `<dt>Feu</dt><dd>${esc(f.nom)}</dd>` : ''}${d.k === 'ccf' || d.k === 'fpt' ? `<dt>Réserve d'autoprotection</dt><dd>${d.au ? 'en cours d\'utilisation' : (d.k === 'fpt' ? '300' : '500') + ' L (intouchable par les lances)'}</dd>` : ''}${d.g ? `<dt>Groupe</dt><dd>${esc(d.g)} <button type="button" class="mini" data-groupe="${esc(d.g)}">choisir le groupe</button></dd>` : ''}<dt>Eau projetée</dt><dd>${nf(d.l / 1000)} m³</dd></dl>
     ${d.k === 'vlhr' ? '<p class="note">Le chef suit son groupe : donnez vos ordres au groupe.</p>' : boutonsOrdres([d.k], [d.id], null)}</div>`;
 }
 export function ficheGroupe(E, ids, arme) {
@@ -145,7 +160,7 @@ export function moyens(E, sel) {
   const par = {};
   for (const d of E.moyens) (par[d.k] ||= []).push(d);
   let h = `<h2>Les moyens</h2><div class="sous">${E.moyens.length} engins · touchez-en un pour le suivre</div>`;
-  for (const k of ['ccf', 'vlhr', 'bull', 'helico', 'canadair', 'dash']) {
+  for (const k of ORDRE_TYPES) {
     const l = par[k]; if (!l) continue;
     const eng = l.filter(d => d.m).length;
     const grp = [...new Set(l.map(d => d.g).filter(Boolean))];
@@ -170,7 +185,7 @@ export function partie(infos, R, doctrine, mode) {
       <label>Massif<select name="theme">${opt(infos.themes, R.theme)}</select></label>
       <label>Météo du jour<select name="scenario">${opt(infos.scenarios, R.scenario)}</select></label>
       <label>Graine de la carte<input type="number" name="graine" value="${R.graine}" min="1" max="99999"></label>
-      ${['ccf', 'helico', 'canadair', 'dash', 'bull'].map(cur).join('')}
+      ${['ccf', 'fpt', 'helico', 'canadair', 'dash', 'dragon', 'bull', 'debr', 'vpc', 'ravit', 'vsav'].filter(k => infos.limites[k]).map(cur).join('')}
       <label>Doctrine du commandement<select name="doctrine">${opt({ equilibree: 'Équilibrée (doctrine française)', offensive: 'Offensive : tout sur la tête du feu', defensive: 'Défensive : priorité absolue aux biens' }, R.doctrine || doctrine)}</select></label>
       <button type="submit" class="btn prim">Lancer la nouvelle partie</button>
     </form>
@@ -185,6 +200,6 @@ export function partie(infos, R, doctrine, mode) {
     <h3>Légende</h3><div class="legende">
       <span><i style="background:#4f8a3a"></i>Pinède</span><span><i style="background:#9da35a"></i>Lande</span><span><i style="background:#5d9b3a"></i>Feuillus</span><span><i style="background:#d9c25a"></i>Cultures</span>
       <span><i style="background:#3b3632"></i>Brûlé</span><span><i style="background:#4f4439"></i>Éteint</span><span><i style="background:#e0403a"></i>Retardant</span><span><i style="background:#2f7fd8"></i>Mouillé</span>
-      <span><i style="background:#e0cc98"></i>Piste DFCI</span><span><i style="background:#b8955f"></i>Pare-feu</span></div>
+      <span><i style="background:#6f9e4c"></i>Forêt débroussaillée</span><span><i style="background:#e0cc98"></i>Piste DFCI</span><span><i style="background:#b8955f"></i>Pare-feu</span></div>
     <p class="note">Le simulateur se gère seul : le commandement (COS) suit la doctrine française — attaque massive des feux naissants, défense des points sensibles, attaque par les flancs, avions sur la tête et les sautes, retardant et pare-feu devant le front, puis surveillance des lisières. Les avions ne volent ni de nuit ni par vent trop fort.</p>`;
 }

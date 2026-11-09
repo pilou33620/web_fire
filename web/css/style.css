@@ -42,6 +42,7 @@ main { position: relative; overflow: hidden; background: #2d6aa0; min-width: 0; 
 .eti { position: absolute; left: 0; top: 0; width: max-content; padding: 1px 7px; border-radius: 9px; border: 2px solid var(--trait); background: var(--creme); font-family: var(--titre); font-size: 11.5px; font-weight: 600; color: var(--trait); white-space: nowrap; box-shadow: 0 2px 0 rgba(0,0,0,.3); will-change: transform; }
 .eti.moyen { background: #fff; font-size: 11px; }
 .eti.strat { background: #ffe1a8; border-color: #6b3c10; font-size: 12px; }
+.eti.blesse { background: #fff; border-color: #b8321a; color: #b8321a; }
 .eti.tete { background: #ff6a1a; color: #fff; border-color: #3a1405; }
 .flottant { position: absolute; z-index: 3; background: var(--fond); border: 2.5px solid var(--bord); border-radius: 16px; box-shadow: var(--ombre); }
 .temps { left: max(12px, env(safe-area-inset-left, 0px)); top: 12px; display: flex; gap: 2px; padding: 4px; }
