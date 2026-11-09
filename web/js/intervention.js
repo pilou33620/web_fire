@@ -102,7 +102,7 @@ export class Intervention {
     const [mx0, my0] = P.versMetres(P.X[c0], P.Z[c0]);
     this.mx0 = mx0; this.my0 = my0;
     this.S2 = RM / (C.hexM / DIV / SQ3);
-    this.vex = C.theme === 'landes' ? 1.4 : 0.45;
+    this.vex = C.theme === 'gironde' ? 1.4 : 0.45;
     // la zone : les hexagones de la carte à au plus RAY du centre
     const dist = (a, b) => { const dq = P.Q[a] - P.Q[b], dr = P.Rr[a] - P.Rr[b]; return (Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2; };
     this.macro = new Set(); for (let i = 0; i < P.n; i++) if (dist(i, c0) <= RAY) this.macro.add(i);
@@ -200,7 +200,7 @@ export class Intervention {
   _batiCellule(i, e) {
     const C = this.C, P = this.P, s = C.sites[P.site[i]];
     jeter(this.bati.get(i));
-    const L = lot(), tl = this.T.filter(t => t.M === i), landes = C.theme === 'landes';
+    const L = lot(), tl = this.T.filter(t => t.M === i), landes = C.theme === 'gironde';
     semer(i, 5);
     const et = e === 'b' ? 'b' : '.';
     for (const t of tl) {

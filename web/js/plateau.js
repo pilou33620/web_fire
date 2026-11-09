@@ -17,7 +17,8 @@ export class Plateau {
     this.S = R / Rm;                                 // unités 3D par mètre
     this.OX = C.largeur * this.S / 2; this.OZ = C.hauteur * this.S / 2;
     this.n = C.cols * C.rows;
-    this.k = C.theme === 'landes' ? 0.026 : 0.012;   // exagération du relief
+    this.k = 0.026;                                  // exagération du relief
+    this.dens = clamp(3000 / this.n, 0.25, 1);         // grande carte : moins d'arbres par hexagone, mais plus gros (mémoire, tablette)
     this.X = new Float32Array(this.n); this.Z = new Float32Array(this.n); this.top = new Float32Array(this.n);
     this.Q = new Int32Array(this.n); this.Rr = new Int32Array(this.n);
     this.index = new Map();
@@ -92,7 +93,7 @@ export class Plateau {
       const s = this.site[i];
       if (s >= 0) this._bati(D, i, C.sites[s], e);
       else if (f === 'X') { /* sol nu */ }
-      else if (e !== 'b' || 'PFJQ'.includes(f)) M.vegetation(D, f === 'B' || f === 'U' || f === 'Z' || f === 'T' ? 'H' : f, e, this.X[i], y, this.Z[i], R, 1, e === 'b' ? 0.6 : 1, (a, b, r) => this.libre(a, b, r));
+      else if (e !== 'b' || 'PFJQ'.includes(f)) M.vegetation(D, f === 'B' || f === 'U' || f === 'Z' || f === 'T' ? 'H' : f, e, this.X[i], y, this.Z[i], R, 1 / Math.sqrt(this.dens) ** 0.5, (e === 'b' ? 0.6 : 1) * this.dens, (a, b, r) => this.libre(a, b, r));
     }
     const sol = fige(L, grp, { contour: false });
     sol.children[0].castShadow = false;
@@ -108,7 +109,7 @@ export class Plateau {
     };
     const etat = e === 'b' ? 'b' : '.';
     const D0 = D; D = lot();
-    const landes = C.theme === 'landes';
+    const landes = C.theme === 'gironde';
     if (s.type === 'ville') {
       if (i === s.centre) { const c = pos(0.5); if (c) M.eglise(D, c[0], y, c[1], 0.3, 1.1); }
       const nb = i === s.centre ? 5 : 7;

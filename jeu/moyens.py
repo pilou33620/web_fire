@@ -1,7 +1,8 @@
 """Les moyens de lutte : camions-citernes feux de forêt (CCF), bulldozers, hélicoptères bombardiers d'eau (HBE),
 Canadair (indicatif « Pélican ») et Dash 8 de retardant (indicatif « Milan »).
 
-Unités : vitesses en hexagones par minute (1 hexagone = 300 m : 1 hex/min = 18 km/h), eau en litres.
+Unités : vitesses en hexagones de 300 m par minute (1 hex/min = 18 km/h), ramenées à la taille des hexagones de la carte
+(Grille.ech) ; eau en litres.
 """
 import math
 
@@ -48,7 +49,11 @@ def dans_cone(g, i, j, cone):
 
 
 def vitesse_sol(kind, carte, feu, i):
-    """Hexagones par minute pour un engin terrestre sur la cellule i."""
+    """Hexagones (de la carte) par minute pour un engin terrestre sur la cellule i."""
+    return _vitesse_300(kind, carte, feu, i) * carte.g.ech
+
+
+def _vitesse_300(kind, carte, feu, i):
     r = carte.route[i]
     f = carte.fuel[i]
     if kind in ('bull', 'debr'):
@@ -136,7 +141,7 @@ class Moyen:
             v = vitesse_sol(kind, c, feu, j)
             if v <= 0:
                 if c.fuel[j] == 'R' and c.route[j]:
-                    v = 2.0                 # un pont
+                    v = 2.0 * c.g.ech       # un pont
                 else:
                     return None
             if etat[j] == BRULE and j != dest:
@@ -147,7 +152,10 @@ class Moyen:
                 return 1.0 / v + 2.5
             return 1.0 / v
 
-        ch, _ = astar(c.g, depart, dest, cout, 0.42)
+        # destination encerclée (par le feu) : inutile de fouiller toute la carte pour le découvrir
+        if dest not in c.g.voisins(depart) and all(cout(dest, k) is None for k in c.g.voisins(dest)):
+            return None
+        ch, _ = astar(c.g, depart, dest, cout, 0.42 / c.g.ech)
         return ch
 
     def facteur_voie(self, p, j):
@@ -171,7 +179,7 @@ class Moyen:
                 if not self.aller(p, dest):
                     self.chemin = []
                 return
-            v = (vitesse_sol(self.kind, c, feu, j) or 2.0) * self.facteur_voie(p, j)
+            v = (vitesse_sol(self.kind, c, feu, j) or 2.0 * g.ech) * self.facteur_voie(p, j)
             reste = (1 - self.avance) / v
             if reste <= budget:
                 budget -= reste
@@ -194,7 +202,7 @@ class Moyen:
     def voler(self, p, x, y):
         """Vole vers (x, y). Renvoie True à l'arrivée."""
         g = p.carte.g
-        v = TYPES[self.kind]['vitesse'] * g.hex_m
+        v = TYPES[self.kind]['vitesse'] * 300
         dx, dy = x - self.x, y - self.y
         d = math.hypot(dx, dy)
         self.vol += 1

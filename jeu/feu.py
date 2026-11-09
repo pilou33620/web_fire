@@ -82,7 +82,7 @@ class Feu:
                 fr = 0.12 if self.ret[j] > 0 else 1.0
                 fd = 0.3 ** min(3, self.defense[j])
                 reste = 1.0 - self.prog[j]
-                r = cj['ros'] * fw * fs * fm * fsech * frein * fr * fd * (1 - self.mouille[j]) * (0.4 + 0.6 * reste)
+                r = cj['ros'] * g.ech * fw * fs * fm * fsech * frein * fr * fd * (1 - self.mouille[j]) * (0.4 + 0.6 * reste)
                 p = 1 - math.exp(-r * Ii)
                 if p > 0 and self.rnd.random() < p:
                     allumes.append((j, (d + 3) % 6, self.foyer[i]))
@@ -92,8 +92,8 @@ class Feu:
                 if self.rnd.random() < taux:
                     dist = 2 + self.rnd.expovariate(1 / max(1.0, V / 14))
                     ang = math.atan2(vy, vx) + self.rnd.gauss(0, 0.3)
-                    x = g.cx[i] + math.cos(ang) * dist * g.hex_m
-                    y = g.cy[i] + math.sin(ang) * dist * g.hex_m
+                    x = g.cx[i] + math.cos(ang) * dist * 300
+                    y = g.cy[i] + math.sin(ang) * dist * 300
                     k = g.sous(x, y)
                     if k is not None and self.peut_bruler(k) and self.mouille[k] < 0.3 and self.ret[k] <= 0:
                         if self.rnd.random() < m.f_humidite(self.mouille[k]):
@@ -106,7 +106,7 @@ class Feu:
             fm = m.f_humidite(self.mouille[i])
             imax = ci['imax'] * (0.45 + 0.55 * fm) * (0.8 + 0.2 * fsech) * (1 - 0.85 * self.mouille[i])
             self.I[i] += (imax - self.I[i]) * 0.25
-            self.prog[i] += (0.35 + 0.65 * self.I[i]) / ci['dur']
+            self.prog[i] += (0.35 + 0.65 * self.I[i]) * g.ech / ci['dur']
             if self.prog[i] >= 1.0:
                 fini.append((i, BRULE_FINI))
             elif self.I[i] < 0.05:
@@ -147,7 +147,7 @@ class Feu:
         if not COMB[self.c.fuel[i]]['brule']:
             return 0
         res = COMB[self.c.fuel[i]]['res']
-        k = litres / (6000.0 * res)
+        k = litres / (6000.0 * res)     # shortcut: pas ramené à la taille de l'hexagone (le jeu resterait injouable avec 16 CCF)
         self.mouille[i] = min(1.0, self.mouille[i] + k * 0.6)
         if self.etat[i] == BRULE:
             # un feu très intense « boit » l'eau : le largage est moins efficace sur une tête violente

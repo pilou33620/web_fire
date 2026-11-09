@@ -67,6 +67,7 @@ export function fusion(geos) {
   for (const geo of geos) geo.dispose();
   return out;
 }
+function LIBERER() { this.array = null; }
 export function fige(L, parent, { mat = MAT, ombre = true, contour = true } = {}) {
   const grp = new THREE.Group();
   const geo = fusion(L.g);
@@ -74,6 +75,8 @@ export function fige(L, parent, { mat = MAT, ombre = true, contour = true } = {}
   const geoO = contour ? fusion(L.o) : (L.o.forEach(o => o.dispose()), null);
   if (geoO) grp.add(new THREE.Mesh(geoO, CONT));
   L.g = []; L.o = [];
+  // une fois sur la carte graphique, la copie en mémoire ne sert plus (les blocs sont refaits de zéro quand ils changent)
+  for (const m of grp.children) { m.geometry.computeBoundingSphere(); for (const a of Object.values(m.geometry.attributes)) a.onUpload(LIBERER); if (m.geometry.index) m.geometry.index.onUpload(LIBERER); }
   if (parent) parent.add(grp);
   return grp;
 }

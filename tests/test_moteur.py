@@ -13,7 +13,7 @@ from jeu.partie import Partie  # noqa: E402
 SANS_MOYENS = dict(ccf=0, fpt=0, bull=0, debr=0, vpc=0, ravit=0, vsav=0, helico=0, canadair=0, dash=0, dragon=0)
 
 
-def partie_calme(moyens=None, graine=5, theme='landes'):
+def partie_calme(moyens=None, graine=5, theme='gironde'):
     """Une partie sans départ de feu automatique."""
     p = Partie(graine, theme, 'chaud', moyens=moyens, premier_feu=False)
     p.prochain_depart = 10 ** 9
@@ -22,19 +22,21 @@ def partie_calme(moyens=None, graine=5, theme='landes'):
 
 
 def cellule_centrale(p, fuel='P'):
+    """Au cœur du massif : le centre des hexagones de ce combustible."""
     g = p.carte.g
-    mid = g.sous(g.largeur / 2, g.hauteur / 2)
+    cells = [i for i in range(g.n) if p.carte.fuel[i] == fuel]
+    mid = g.sous(sum(g.cx[i] for i in cells) / len(cells), sum(g.cy[i] for i in cells) / len(cells))
     return min((i for i in range(g.n) if p.carte.fuel[i] == fuel and p.carte.site_de[i] < 0), key=lambda i: g.distance(i, mid))
 
 
 class TestCarte(unittest.TestCase):
     def test_reproductible(self):
-        a, b = Carte(11, 'landes'), Carte(11, 'landes')
+        a, b = Carte(11, 'gironde'), Carte(11, 'gironde')
         self.assertEqual(a.fuel, b.fuel)
         self.assertEqual(a.route, b.route)
 
     def test_themes(self):
-        for th in ('landes', 'mediterranee'):
+        for th in ('gironde',):
             c = Carte(3, th)
             self.assertGreaterEqual(len(c.sites), 8, th)
             self.assertGreaterEqual(len(c.casernes), 2, th)
@@ -54,9 +56,9 @@ class TestFeu(unittest.TestCase):
         p.action(dict(type='vent', de=90, force=40))         # vent d'est : le feu part vers l'ouest
         i0 = cellule_centrale(p)
         p.feu.allumer(i0, t=0)
-        for _ in range(90):
-            p.pas()
         g = p.carte.g
+        for _ in range(round(90 / g.ech)):        # 90 min sur des hexagones de 300 m
+            p.pas()
         touches = [i for i in range(g.n) if p.feu.etat[i] in (BRULE, BRULE_FINI)]
         self.assertGreater(len(touches), 8)
         ouest = sum(1 for i in touches if g.cx[i] < g.cx[i0] - g.hex_m)
@@ -86,7 +88,7 @@ class TestCommandement(unittest.TestCase):
         avec = sans = 0.0
         for graine in (3, 7, 11):
             for moyens, cumul in ((None, 'avec'), (SANS_MOYENS, 'sans')):
-                p = Partie(graine, 'landes', 'canicule', moyens=moyens)
+                p = Partie(graine, 'gironde', 'canicule', moyens=moyens)
                 for _ in range(300):
                     p.pas()
                 if cumul == 'avec':
@@ -244,7 +246,7 @@ class TestEngins(unittest.TestCase):
         p = partie_calme()
         g = p.carte.g
         i0 = cellule_centrale(p)
-        route = next(i for i in range(g.n) if p.carte.route[i] >= 2 and p.carte.site_de[i] < 0)
+        route = min((i for i in range(g.n) if p.carte.route[i] >= 2 and p.carte.site_de[i] < 0), key=lambda i: g.distance(i, i0))
         p.ajouter_blesses(i0, 4, 'equipage', 'danger', 'test équipage')
         p.ajouter_blesses(route, 2, 'pompier', 'leger', 'test léger')
         for _ in range(3):
@@ -265,7 +267,7 @@ class TestEngins(unittest.TestCase):
         for _ in range(30):
             p.pas()
         u.carb = 0.2 * u.carb_max
-        for _ in range(60):
+        for _ in range(round(60 / g.ech)):
             p.pas()
         self.assertGreater(u.carb, 0.9 * u.carb_max)
 
@@ -278,10 +280,10 @@ class TestEngins(unittest.TestCase):
         route = next(i for i in range(c.g.n) if c.route[i] >= 2)
         self.assertEqual(vitesse_sol('fpt', c, p.feu, piste), 0)
         self.assertEqual(vitesse_sol('fpt', c, p.feu, foret), 0)
-        self.assertGreater(vitesse_sol('fpt', c, p.feu, route), 2.5)
+        self.assertGreater(vitesse_sol('fpt', c, p.feu, route), 2.5 * c.g.ech)
 
     def test_debroussaillage_hors_risque_severe(self):
-        p = Partie(3, 'landes', 'calme', premier_feu=False)
+        p = Partie(3, 'gironde', 'calme', premier_feu=False)
         p.prochain_depart = 10 ** 9
         for _ in range(240):
             p.pas()
@@ -330,7 +332,7 @@ class TestEvacuation(unittest.TestCase):
 
 class TestVoies(unittest.TestCase):
     def test_reseau_propre(self):
-        for th in ('landes', 'mediterranee'):
+        for th in ('gironde',):
             c = Carte(4, th)
             aretes = set()
             for r in c.routes_poly:
@@ -375,7 +377,7 @@ class TestVoies(unittest.TestCase):
 
 class TestExport(unittest.TestCase):
     def test_json(self):
-        p = Partie(4, 'mediterranee', 'mistral')
+        p = Partie(4, 'gironde', 'mistral')
         for _ in range(60):
             p.pas()
         json.dumps(p.export_carte())

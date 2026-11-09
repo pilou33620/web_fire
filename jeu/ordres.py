@@ -237,7 +237,7 @@ def apercu(p, ids, ordre, cell=None, cell2=None, d=None):
         if u.terre and m.get('poste') is not None:
             ch = u.chemin_vers(p, m['poste']) or []
             e['chemin'] = ch[:80]
-            e['minutes'] = round(sum(1 / max(0.2, vitesse_sol(u.kind, p.carte, feu, j)) for j in ch[1:]))
+            e['minutes'] = round(sum(1 / max(0.2 * p.carte.g.ech, vitesse_sol(u.kind, p.carte, feu, j)) for j in ch[1:]))
             cone = (m['dir'], CONE) if m.get('dir') is not None else None
             q = m['poste']
             portee = [j for j in [q] + g.voisins(q) if dans_cone(g, q, j, cone)]

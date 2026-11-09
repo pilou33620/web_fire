@@ -36,7 +36,7 @@ class Simulation:
         self.lock = threading.Lock()
         self.vitesse = 1.0
         self.pause = False
-        self.reglages = dict(graine=7, theme='landes', scenario='canicule', moyens=dict(MOYENS_DEFAUT), doctrine='equilibree')
+        self.reglages = dict(graine=7, theme='gironde', scenario='canicule', moyens=dict(MOYENS_DEFAUT), doctrine='equilibree')
         self.nouvelle(self.reglages)
         threading.Thread(target=self._boucle, daemon=True).start()
 
@@ -105,7 +105,7 @@ SIM = None
 
 
 def infos():
-    return dict(scenarios={k: v['nom'] for k, v in SCENARIOS.items()}, themes={'landes': 'Landes de Gascogne', 'mediterranee': 'Massif méditerranéen'},
+    return dict(scenarios={k: v['nom'] for k, v in SCENARIOS.items()}, themes={'gironde': 'Gironde'},
                 limites=LIMITES, defaut=MOYENS_DEFAUT, vitesses=VITESSES)
 
 

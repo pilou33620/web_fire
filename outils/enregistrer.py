@@ -18,7 +18,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--sortie', default=os.path.join(ROOT, 'web', 'demo', 'rejeu.json'))
     ap.add_argument('--graine', type=int, default=7)
-    ap.add_argument('--theme', default='landes')
+    ap.add_argument('--theme', default='gironde')
     ap.add_argument('--scenario', default='canicule')
     ap.add_argument('--minutes', type=int, default=600)
     ap.add_argument('--pas', type=int, default=3)
@@ -39,7 +39,7 @@ def main():
                 u.pop('v', None)
             images.append(e)
         p.pas()
-    infos = dict(scenarios={k: v['nom'] for k, v in SCENARIOS.items()}, themes={'landes': 'Landes de Gascogne', 'mediterranee': 'Massif méditerranéen'},
+    infos = dict(scenarios={k: v['nom'] for k, v in SCENARIOS.items()}, themes={'gironde': 'Gironde'},
                  limites=LIMITES, defaut=MOYENS_DEFAUT, vitesses=[0.25, 0.5, 1, 2, 4, 8, 16])
     d = dict(pas=a.pas, carte=carte, infos=infos, images=images, journal=journal, evts=evts,
              reglages=dict(graine=a.graine, theme=a.theme, scenario=a.scenario, moyens=dict(MOYENS_DEFAUT), doctrine='equilibree'))

@@ -59,7 +59,7 @@ export function vegetation(L, f, etat, x, y, z, R, s = 1, densite = 1, libre = n
     for (let i = 0, n = nb(8); i < n; i++) { const [a, b] = pos(); buisson(L, a, y, b, 1.15 * s, etat, choix([0x5f8a3c, 0x6f8f44, 0x557a36])); }
     for (let i = 0, n = nb(2); i < n; i++) { const [a, b] = pos(); sapinPin(L, a, y, b, 0.8 * s, etat); }
   } else if (f === 'H') { if (!brule) for (let i = 0; i < nb(3); i++) { const [a, b] = pos(); buisson(L, a, y, b, 0.5 * s, etat, 0x8cbf4a); } }
-  else if (f === 'C') { for (let i = 0; i < 3; i++) { const [a, b] = pos(); put(L, boite(entre(3, 5) * s, 0.4 * s, entre(2, 3) * s), brule ? CENDRE : etat === 'f' ? 0x8a5a2a : choix([0xe3c75b, 0xd6b24a, 0xc9b24a]), a, y + 0.2 * s, b, rnd() * 3, 0.12); } }
+  else if (f === 'C') { for (let i = 0, n = nb(3); i < n; i++) { const [a, b] = pos(); put(L, boite(entre(3, 5) * s, 0.4 * s, entre(2, 3) * s), brule ? CENDRE : etat === 'f' ? 0x8a5a2a : choix([0xe3c75b, 0xd6b24a, 0xc9b24a]), a, y + 0.2 * s, b, rnd() * 3, 0.12); } }
   else if (f === 'V') { const a = rnd() * Math.PI; for (let k = -3; k <= 3; k++) put(L, boite((11 - Math.abs(k) * 1.6) * s, 0.6 * s, 0.5 * s), brule ? NOIR : 0x557a2e, x + Math.cos(a + Math.PI / 2) * k * 1.6 * s, y + 0.3 * s, z - Math.sin(a + Math.PI / 2) * k * 1.6 * s, a, 0.1); }
   else if (f === 'O') for (let i = 0, n = nb(6); i < n; i++) { const [a, b] = pos(); olivier(L, a, y, b, s, etat); }
   else if (f === 'D') { if (!brule) for (let i = 0; i < nb(3); i++) { const [a, b] = pos(), d = sphere(entre(2, 3) * s, 1); d.scale(1.4, 0.3, 0.8); put(L, d, 0xe8d8a0, a, y, b, rnd() * 3, 0.12); } }
