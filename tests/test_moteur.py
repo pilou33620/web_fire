@@ -106,6 +106,65 @@ class TestCommandement(unittest.TestCase):
         self.assertTrue(any('naissant' in j['txt'] for j in p.journal))
 
 
+class TestOrdres(unittest.TestCase):
+    def test_l_ia_respecte_vos_ordres(self):
+        p = partie_calme()
+        i0 = cellule_centrale(p)
+        p.action(dict(type='allumer', cell=i0))
+        ccf = [u for u in p.moyens if u.kind == 'ccf'][:2]
+        loin = p.carte.casernes[0]['cell']
+        r = p.action(dict(type='ordre', moyens=[u.id for u in ccf], ordre='poster', cell=loin))
+        self.assertTrue(r['ok'])
+        for _ in range(12):
+            p.pas()
+        for u in ccf:
+            self.assertTrue(u.joueur)
+            self.assertEqual(u.mission['type'], 'preposition')
+        p.action(dict(type='ordre', moyens=[ccf[0].id], ordre='liberer'))
+        self.assertFalse(ccf[0].joueur)
+
+    def test_mode_manuel(self):
+        p = partie_calme()
+        p.action(dict(type='commandement', valeur='manuel'))
+        p.action(dict(type='allumer', cell=cellule_centrale(p)))
+        for _ in range(10):
+            p.pas()
+        self.assertFalse([u for u in p.moyens if u.mission], "en mode manuel, l'IA n'engage rien")
+        canadair = next(u for u in p.moyens if u.kind == 'canadair')
+        self.assertTrue(p.action(dict(type='ordre', moyens=[canadair.id], ordre='larguer', cell=cellule_centrale(p)))['ok'])
+        self.assertFalse(p.action(dict(type='ordre', moyens=[canadair.id], ordre='attaquer', cell=cellule_centrale(p)))['ok'])
+
+
+class TestEvacuation(unittest.TestCase):
+    def test_evacuer_puis_arriver(self):
+        p = partie_calme(SANS_MOYENS)
+        s = next(s for s in p.carte.sites if s['type'] == 'village')
+        self.assertTrue(p.action(dict(type='evacuer', site=s['id']))['ok'])
+        for _ in range(240):
+            p.pas()
+        e = p.evac.sites[s['id']]
+        self.assertEqual(e['reste'] + e['route'], 0)
+        self.assertEqual(e['arrives'], s['pop'])
+
+    def test_confiner(self):
+        p = partie_calme(SANS_MOYENS)
+        s = next(s for s in p.carte.sites if s['type'] == 'camping')
+        p.action(dict(type='confiner', site=s['id']))
+        self.assertEqual(p.evac.sites[s['id']]['confines'], s['pop'])
+
+    def test_la_fumee_suit_le_vent(self):
+        p = partie_calme(SANS_MOYENS)
+        p.action(dict(type='vent', de=90, force=40))
+        i0 = cellule_centrale(p)
+        p.feu.allumer(i0, t=0)
+        for _ in range(15):
+            p.pas()
+        g = p.carte.g
+        ouest = sum(1 for i in p.evac.fumee if g.cx[i] < g.cx[i0] - g.hex_m)
+        est = sum(1 for i in p.evac.fumee if g.cx[i] > g.cx[i0] + g.hex_m)
+        self.assertGreater(ouest, est)
+
+
 class TestExport(unittest.TestCase):
     def test_json(self):
         p = Partie(4, 'mediterranee', 'mistral')

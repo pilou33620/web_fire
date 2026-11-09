@@ -67,6 +67,7 @@ class Moyen:
         self.litres = 0
         self.largages = 0
         self.renfort = False
+        self.joueur = False               # sous les ordres du joueur : l'IA n'y touche pas
 
     # ------------------------------------------------------------------ déplacement au sol
     def aller(self, p, dest):
@@ -464,6 +465,7 @@ class Moyen:
             self.vise = None
             self.act = dict(k='largue')
             self.mission = None           # une ligne par mission : le commandement en redemande s'il faut
+            self.joueur = False
         else:
             self.act = dict(k='vol')
 
@@ -474,4 +476,5 @@ class Moyen:
                     e=self.etat, eau=round(100 * self.eau / self.cap) if self.cap else None,
                     m=m.get('label') if m else None, mt=m.get('type') if m else None, f=m.get('feu') if m else None,
                     p=m.get('poste') if m else None, a=self.act, c=self.cell, r=self.renfort, ph=self.phase,
-                    v=self.vise if self.vise else None, l=round(self.litres))
+                    v=self.vise if self.vise else None, l=round(self.litres), j=self.joueur,
+                    g=getattr(self, 'groupe', None))

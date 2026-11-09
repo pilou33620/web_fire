@@ -30,6 +30,7 @@ class Commandement:
         self.renforts = 0
         self.gaar = False
         self.prepos = False
+        self.mode = 'auto'                  # 'auto' : le COS est l'IA ; 'manuel' : le COS, c'est vous (l'IA conseille seulement)
 
     # ------------------------------------------------------------------ foyers et feux
     def racine(self, f):
@@ -101,10 +102,23 @@ class Commandement:
         self._liberer()
         actifs = sorted([f for f in self.feux.values() if f['statut'] != 'éteint' and f['detecte']],
                         key=lambda f: -f['prio'])
+        if self.mode == 'manuel':
+            for f in actifs:
+                self._alertes(f)
+            return
         for f in actifs:
             self._engager(f)
         self._renforts()
         self._prevention(bool(actifs))
+
+    def _alertes(self, f):
+        """En mode manuel, l'IA ne commande plus : elle signale seulement les sites menacés."""
+        for sid, eta in f['menaces'].items():
+            if eta <= 150 and sid not in f['menace_log']:
+                f['menace_log'].add(sid)
+                self.p.journal_ajout('alerte', f"{self.p.carte.sites[sid]['nom']} menacé : arrivée du feu estimée dans {eta} min.")
+        st = {'naissant': 'Feu naissant : à vous d\'engager les moyens', 'en progression': 'Feu en progression : à vous de jouer'}.get(f['statut'], f['statut'].capitalize())
+        self._strategie(f, st + ' (COS : vous)')
 
     def _fiches(self, par, eteints):
         p, feu, g = self.p, self.p.feu, self.p.carte.g
@@ -239,6 +253,12 @@ class Commandement:
     def _liberer(self):
         for u in self.p.moyens:
             m = u.mission
+            if u.joueur:
+                if m and (m.get('fini') or m.get('bloque', 0) > 3):
+                    self.p.journal_ajout('cos', f"{u.nom} : ordre terminé" + (' (position inaccessible)' if m.get('bloque', 0) > 3 else '') + ', retour à l\'IA.')
+                    u.mission = None
+                    u.joueur = False
+                continue
             if not m:
                 continue
             f = self.feux.get(self.racine(m['feu'])) if 'feu' in m else None
@@ -262,7 +282,7 @@ class Commandement:
         g = self.p.carte.g
         out = []
         for u in self.p.moyens:
-            if u.kind != kind:
+            if u.kind != kind or u.joueur:
                 continue
             if u.etat == 'au_sol' and not self.p.meteo.vol_possible(kind):
                 continue
@@ -277,7 +297,7 @@ class Commandement:
         return [u for _, u in out]
 
     def _engages(self, f, kind, typ=None):
-        return [u for u in self.p.moyens if u.kind == kind and u.mission and self.racine(u.mission.get('feu', -1)) == f['id']
+        return [u for u in self.p.moyens if u.kind == kind and not u.joueur and u.mission and self.racine(u.mission.get('feu', -1)) == f['id']
                 and (typ is None or u.mission['type'] == typ)]
 
     def _strategie(self, f, texte):
@@ -317,9 +337,7 @@ class Commandement:
             if sid not in f['menace_log']:
                 f['menace_log'].add(sid)
                 p.journal_ajout('alerte', f"{s['nom']} menacé : arrivée du feu estimée dans {eta} min.")
-                if s['type'] == 'camping' and eta < 120:
-                    p.journal_ajout('cos', f"Évacuation préventive de {s['nom']} ({s['pop']} personnes).")
-                    p.evacues.add(sid)
+            self._population(s, eta)
             besoin = {'ville': 4, 'village': 2, 'camping': 3, 'usine': 3, 'patrimoine': 1}.get(s['type'], 2)
             if eta < 60:
                 besoin += 1
@@ -407,6 +425,16 @@ class Commandement:
             txt += ' (moyens aériens au sol : ' + ('nuit' if met.nuit else 'vent trop fort') + ')'
         self._strategie(f, txt)
 
+    def _population(self, s, eta):
+        """Évacuer tant qu'il est temps de partir par la route ; sinon, confiner (mise à l'abri sur place)."""
+        ev = self.p.evac.sites.get(s['id'])
+        if not ev or ev['statut'] != 'normal' or s['type'] not in ('ville', 'village', 'camping', 'usine') or eta > 150:
+            return
+        if self.p.evac.temps_evacuation(s['id']) + 15 < eta:
+            self.p.evac.evacuer(s['id'])
+        elif eta < 75:
+            self.p.evac.confiner(s['id'])
+
     # ------------------------------------------------------------------ choix des postes
     def _accessible(self, i):
         p = self.p
@@ -477,9 +505,30 @@ class Commandement:
         return out
 
     # ------------------------------------------------------------------ cibles aériennes (appelées par les avions)
+    def _ligne_en(self, i0, longueur):
+        """Une ligne de cellules combustibles perpendiculaire au vent, centrée sur i0."""
+        p, g, c = self.p, self.p.carte.g, self.p.carte
+        vx, vy = p.meteo.vers()
+        out = []
+        for k in range(-(longueur // 2), longueur // 2 + 1):
+            j = g.sous(g.cx[i0] - vy * k * g.hex_m, g.cy[i0] + vx * k * g.hex_m)
+            if j is not None and COMB[c.fuel[j]]['brule'] and p.feu.etat[j] != BRULE and j not in out:
+                out.append(j)
+        return out
+
     def cible_largage(self, u):
         p, feu, g = self.p, self.p.feu, self.p.carte.g
         m = u.mission
+        if m and m.get('cible') is not None:
+            # largage demandé par le joueur : la flamme la plus proche du point visé, sinon le point lui-même (mouiller)
+            ci = m['cible']
+            proches = [j for j in g.anneau(ci, 2) if feu.etat[j] == BRULE]
+            cible = min(proches, key=lambda j: g.distance(j, ci)) if proches else ci
+            if not COMB[p.carte.fuel[cible]]['brule']:
+                return None
+            if u.kind == 'canadair':
+                return self._ligne_en(cible, 3)[:2] or [cible]
+            return [cible]
         if not m or 'feu' not in m:
             return None
         f = self.feux.get(self.racine(m['feu']))
@@ -525,6 +574,8 @@ class Commandement:
 
     def ligne_retardant(self, u):
         m = u.mission
+        if m and m.get('cible') is not None:
+            return self._ligne_en(m['cible'], 5)
         f = self.feux.get(self.racine(m['feu'])) if m else None
         if not f or f['tete'] is None:
             return []
