@@ -44,6 +44,7 @@ class Partie:
         self.journal_ajout('info', f"{self.meteo.heure()} — {self.meteo.sc['nom']}. Risque {self.meteo.niveau.lower()}.")
         self._pe_cache = {}
         self.danger = set()
+        self.trafic_engins, self.trafic_convois = {}, {}
 
     # ------------------------------------------------------------------ moyens
     def _creer_moyens(self):
@@ -151,7 +152,7 @@ class Partie:
             i = self.rnd.randrange(g.n)
             if not COMB[c.fuel[i]]['brule'] or c.fuel[i] in HABITE or self.feu.etat[i] != INTACT:
                 continue
-            pres = c.route[i] >= 2 or any(c.site_de[j] >= 0 for j in g.voisins(i))
+            pres = c.route[i] >= 2 or any(c.site_de[j] >= 0 or c.route[j] >= 2 for j in g.voisins(i))   # malus des routes : mégots, véhicules
             if pres or self.rnd.random() < 0.15:
                 cause = self.rnd.choice(['mégot jeté d\'une voiture', 'travaux agricoles', 'barbecue', 'ligne électrique',
                                          'engin forestier', 'origine inconnue', 'malveillance présumée'])
@@ -206,6 +207,13 @@ class Partie:
         self._detection()
         g, feu = self.carte.g, self.feu
         self.danger = set()
+        self.trafic_engins, self.trafic_convois = {}, {}
+        for u in self.moyens:
+            if u.terre:
+                self.trafic_engins[u.cell] = self.trafic_engins.get(u.cell, 0) + 1
+        for cv in self.evac.convois:
+            if cv.etat != 'arrive':
+                self.trafic_convois[cv.cell] = self.trafic_convois.get(cv.cell, 0) + 1
         for i in feu.brulant:
             if feu.I[i] > 0.55:
                 self.danger.update(g.voisins(i))

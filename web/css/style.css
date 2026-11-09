@@ -128,6 +128,13 @@ h3 { font-family: var(--titre); font-weight: 600; font-size: 15px; margin: 16px 
 .legende { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; font-size: 12px; font-weight: 800; color: var(--doux); }
 .legende i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; border: 2px solid var(--bord); margin-right: 6px; vertical-align: -2px; }
 
+/* bonus et malus des voies */
+.bm { margin-top: 8px; padding: 7px 10px; border-radius: 12px; background: var(--fond3); border: 2px solid var(--bord); font-size: 12px; }
+.bm b { font-family: var(--titre); font-weight: 600; font-size: 13.5px; }
+.bm ul { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 2px; }
+.bm li { font-weight: 700; line-height: 1.35; background: none !important; padding: 0 !important; display: block !important; }
+.bm li.plus { color: var(--vert); } .bm li.moins { color: var(--rouge); }
+
 /* ordres du joueur, évacuations */
 .ordres { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
 .ordres .btn { min-height: 32px; padding: 0 9px; font-size: 12px; }

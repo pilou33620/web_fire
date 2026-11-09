@@ -108,8 +108,8 @@ class Evacuation:
             if t < 40:
                 return None                # on n'envoie pas un convoi là où le feu sera dans moins de 40 min
             pen = 4.0 if t < 120 else 0.0
-            if c.route[j] == 0 and c.site_de[j] < 0:
-                return None
+            if c.route[j] < 2 and c.site_de[j] < 0:
+                return None                # pas de convoi de civils sur les pistes forestières
             if c.fuel[j] in 'ML' or (c.fuel[j] == 'R' and not c.route[j]):
                 return None
             return 1.0 / self._vitesse(j) + pen
@@ -221,7 +221,7 @@ class Evacuation:
                 if not ch and not cv.repli:
                     # plus d'itinéraire sûr : demi-tour vers le village, où l'on se mettra à l'abri
                     origine = c.sites[cv.site]['centre']
-                    ch, _ = astar(g, cv.cell, origine, lambda i, j: None if j in self.coupees or (c.route[j] == 0 and c.site_de[j] < 0) else 1.0, 0.6)
+                    ch, _ = astar(g, cv.cell, origine, lambda i, j: None if j in self.coupees or (c.route[j] < 2 and c.site_de[j] < 0) else 1.0, 0.6)
                     if ch:
                         cv.repli, cv.dest = True, origine
                         p.journal_ajout('alerte', f"Convoi de {c.sites[cv.site]['nom']} : route coupée, demi-tour et mise à l'abri au village.")

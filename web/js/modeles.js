@@ -41,9 +41,13 @@ export function olivier(L, x, y, z, s, etat) {
 }
 
 // la végétation d'un hexagone selon son combustible
-export function vegetation(L, f, etat, x, y, z, R, s = 1, densite = 1) {
-  const pos = () => { const a = rnd() * Math.PI * 2, l = Math.sqrt(rnd()) * R * 0.72; return [x + Math.cos(a) * l, z + Math.sin(a) * l]; };
+export function vegetation(L, f, etat, x, y, z, R, s = 1, densite = 1, libre = null) {
+  const pos = () => {
+    for (let k = 0; k < 8; k++) { const a = rnd() * Math.PI * 2, l = Math.sqrt(rnd()) * R * 0.72, p = [x + Math.cos(a) * l, z + Math.sin(a) * l]; if (!libre || libre(p[0], p[1], 1.6 * s)) return p; }
+    return [x + 1e5, z];          // pas de place : l'objet part hors de vue (il est éliminé plus bas)
+  };
   const nb = k => Math.round(k * densite);
+  const L0 = L; L = { g: [], o: [] };
   const brule = etat === 'b' || etat === 'e' || etat === 'n';
   if (f === 'P') for (let i = 0, n = nb(6 + rnd() * 3); i < n; i++) { const [a, b] = pos(); pin(L, a, y, b, entre(0.8, 1.15) * s, etat); }
   else if (f === 'F') for (let i = 0, n = nb(5 + rnd() * 3); i < n; i++) { const [a, b] = pos(); feuillu(L, a, y, b, entre(0.8, 1.2) * s, etat); }
@@ -59,6 +63,14 @@ export function vegetation(L, f, etat, x, y, z, R, s = 1, densite = 1) {
   else if (f === 'V') { const a = rnd() * Math.PI; for (let k = -3; k <= 3; k++) put(L, boite((11 - Math.abs(k) * 1.6) * s, 0.6 * s, 0.5 * s), brule ? NOIR : 0x557a2e, x + Math.cos(a + Math.PI / 2) * k * 1.6 * s, y + 0.3 * s, z - Math.sin(a + Math.PI / 2) * k * 1.6 * s, a, 0.1); }
   else if (f === 'O') for (let i = 0, n = nb(6); i < n; i++) { const [a, b] = pos(); olivier(L, a, y, b, s, etat); }
   else if (f === 'D') { if (!brule) for (let i = 0; i < nb(3); i++) { const [a, b] = pos(), d = sphere(entre(2, 3) * s, 1); d.scale(1.4, 0.3, 0.8); put(L, d, 0xe8d8a0, a, y, b, rnd() * 3, 0.12); } }
+  garder(L, L0, x);
+}
+// verse dans L0 les pièces de L qui ne sont pas parties « hors de vue »
+function garder(L, L0, x) {
+  for (const k of ['g', 'o']) for (const geo of L[k]) {
+    geo.computeBoundingBox();
+    if (geo.boundingBox.min.x > x + 5e4) geo.dispose(); else L0[k].push(geo);
+  }
 }
 
 // ------------------------------------------------------------------ bâti

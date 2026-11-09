@@ -6,6 +6,7 @@
 import { THREE, SQ3, MAT, CONT, DEGRADE, Camera, put, lot, fige, jeter, cyl, boite, sphere, cone, semer, rnd, entre, hache, clamp, lerp } from './moteur.js';
 import * as M from './modeles.js';
 import { Convois } from './plateau.js';
+import { dessinerVoies } from './voies.js';
 import * as UI from './ui.js';
 
 const RAY = 4;            // rayon de la zone, en hexagones de la carte
@@ -108,10 +109,12 @@ export class Intervention {
       this.tuiles.setColorAt(k, col.set(0x777777));
     });
     this.tuiles.receiveShadow = true; this.monde.add(this.tuiles);
+    this.parQR = new Map(T.map(t => [t.q + ',' + t.r, t]));
+    // les voies d'abord : on ne plante ni ne construit sur leur emprise
+    this._routes();
     // végétation : troncs, houppiers, buissons (instanciés, pour brûler arbre par arbre)
     this._vegetation();
     this._bati();
-    this._routes();
     this._feux();
     this.unites = new Map();
     this.passes = [];
@@ -124,7 +127,7 @@ export class Intervention {
     const C = this.C, arbres = [];
     for (const t of this.T) {
       const f = C.fuel[t.M]; semer(t.q * 31 + t.r, 9);
-      if (this.P.site[t.M] >= 0 && 'UBZ'.includes(f)) continue;
+      if ((this.P.site[t.M] >= 0 && 'UBZ'.includes(f)) || t.voie) continue;
       const pos = () => [t.X + (rnd() - 0.5) * RM * 1.1, t.Z + (rnd() - 0.5) * RM * 1.1];
       const add = (k, s) => { const [x, z] = pos(); arbres.push({ k, x, z, y: t.top, s: s * entre(0.8, 1.2), t, ry: rnd() * 6 }); };
       if (f === 'P' || f === 'T') { add('pin', 1); if (rnd() < 0.55) add('pin', 0.9); if (rnd() < 0.3) add('buisson', 0.6); }
@@ -174,7 +177,7 @@ export class Intervention {
     semer(i, 5);
     const et = e === 'b' ? 'b' : '.';
     for (const t of tl) {
-      if (rnd() < 0.25) continue;
+      if (rnd() < 0.25 || t.voie) continue;
       const y = t.top, ry = rnd() * 6;
       if (s.type === 'ville') (rnd() < 0.5 ? M.immeuble : M.maison)(L, t.X, y, t.Z, ry, 1.0, et);
       else if (s.type === 'village') (landes ? M.maisonLandaise : M.maison)(L, t.X, y, t.Z, ry, 0.95, et);
@@ -185,24 +188,42 @@ export class Intervention {
     const g = fige(L, this.monde); this.bati.set(i, g); g.userData.e = e;
   }
 
+  tuileDe(X, Z) {
+    const rm = this.C.hexM / DIV / SQ3, x = X / this.S2, y = Z / this.S2;
+    const q = (SQ3 / 3 * x - y / 3) / rm, r = (2 / 3 * y) / rm, s = -q - r;
+    let rq = Math.round(q), rr = Math.round(r); const rs = Math.round(s);
+    const dq = Math.abs(rq - q), dr = Math.abs(rr - r), ds = Math.abs(rs - s);
+    if (dq > dr && dq > ds) rq = -rr - rs; else if (dr > ds) rr = -rq - rs;
+    return this.parQR.get(rq + ',' + rr);
+  }
+  macroDe(X, Z) { const [a, b] = this.P.vers3D(X / this.S2 + this.mx0, Z / this.S2 + this.my0); return this.P.cellule(a, b); }
   _routes() {
-    const C = this.C, P = this.P, L = lot();
+    const C = this.C, P = this.P, L = lot(), D = lot();
+    const voies = [];
     for (const r of C.routes) {
+      const pm = r.p || r.c.map(i => P.versMetres(P.X[i], P.Z[i]));
       let run = [];
-      const fin = () => {
-        if (run.length > 1) {
-          const w = r.n === 3 ? 1.5 : r.n === 2 ? 1.2 : 0.9;
-          const pts = run.map(i => { const [mx, my] = P.versMetres(P.X[i], P.Z[i]); return [(mx - this.mx0) * this.S2, this.haut.get(i) + 0.12, (my - this.my0) * this.S2]; });
-          const lis = P._lisser(pts);
-          if (r.n >= 2) { put(L, ruban(lis.map(p => [p[0], p[1] - 0.02, p[2]]), w + 0.4), 0x6b5236, 0, 0, 0, 0, 0); put(L, ruban(lis, w), 0x9a958c, 0, 0, 0, 0, 0); }
-          else put(L, ruban(lis, w), 0xe0cc98, 0, 0, 0, 0, 0);
+      const fin = () => { if (run.length > 1) voies.push({ n: r.n, p: run }); run = []; };
+      for (let k = 0; k < pm.length - 1; k++) {
+        const [ax, ay] = pm[k], [bx, by] = pm[k + 1], n = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / 40));
+        for (let j = 0; j <= n; j++) {
+          if (j === n && k < pm.length - 2) continue;
+          const x = ax + (bx - ax) * j / n, y = ay + (by - ay) * j / n, [X, Z] = this.vers3(x, y);
+          if (this.macro.has(this.macroDe(X, Z))) run.push([X, Z]); else fin();
         }
-        run = [];
-      };
-      for (const i of r.c) { if (this.macro.has(i)) run.push(i); else fin(); }
+      }
       fin();
     }
-    fige(L, this.monde, { ombre: false, contour: false });
+    const haut = (X, Z) => { const i = this.macroDe(X, Z); return (this.haut.get(i) ?? 0) + (C.fuel[i] === 'R' ? 1.6 : 0); };
+    const sol = (X, Z) => Math.max(haut(X, Z), haut(X + 1.5, Z), haut(X - 1.5, Z), haut(X, Z + 1.5), haut(X, Z - 1.5)) + 0.25;
+    const site = (X, Z) => { const i = this.macroDe(X, Z); const k = i >= 0 ? P.site[i] : -1; return k >= 0 && ['ville', 'village', 'camping'].includes(C.sites[k].type) ? k : -1; };
+    const pont = (X, Z) => C.fuel[this.macroDe(X, Z)] === 'R';
+    const route = (X, Z) => { const i = this.macroDe(X, Z); return i >= 0 && [i, ...P.voisins(i)].some(j => j >= 0 && +C.route[j] >= 2); };
+    const marquer = (X, Z, w) => {
+      for (const [dx, dz] of [[0, 0], [w, 0], [-w, 0], [0, w], [0, -w]]) { const t = this.tuileDe(X + dx, Z + dz); if (t) t.voie = true; }
+    };
+    dessinerVoies(voies, { s: 1.8, sol, site, pont, route, marquer }, L, D);
+    fige(L, this.monde, { ombre: false, contour: false }); fige(D, this.monde);
   }
 
   _feux() {

@@ -36,6 +36,23 @@ EAU = set('MLR')
 HABITE = set('UBTZ')          # les cellules où il y a des gens ou des biens
 ROUTE_FREIN = {0: 1.0, 1: 0.75, 2: 0.55, 3: 0.45}   # une piste ou une route freine le feu (coupure de combustible)
 
+# Bonus et malus de chaque type de voie (repris dans l'interface)
+VOIES = {
+    3: dict(nom='Route principale',
+            bonus=['Camions rapides (60 km/h)', 'Large coupure : le feu passe mal (×0,45)', 'Itinéraire des évacuations'],
+            malus=['Bouchons : les convois d\'évacuation ralentissent les camions', 'Fumée : visibilité réduite, on roule moins vite',
+                   'Plus de départs de feu (mégots, véhicules)', 'Contourne le massif : loin du feu']),
+    2: dict(nom='Route',
+            bonus=['Camions rapides (50 km/h)', 'Coupure : le feu passe mal (×0,55)', 'Itinéraire des évacuations'],
+            malus=['Bouchons : les convois d\'évacuation ralentissent les camions', 'Fumée : visibilité réduite, on roule moins vite',
+                   'Plus de départs de feu (mégots, véhicules)']),
+    1: dict(nom='Piste forestière DFCI',
+            bonus=['Pénètre le massif : poste d\'attaque au contact du feu', 'Citernes DFCI aux croisements',
+                   'Coupure : freine le feu (×0,75)', 'Bulldozer plus rapide pour ouvrir un pare-feu'],
+            malus=['Sable : camions lents (27 km/h)', 'Étroite : à plus de 2 engins sur un tronçon, on n\'avance plus qu\'au pas',
+                   'Piège : fermée aux camions quand elle longe un feu intense', 'Interdite aux convois de civils']),
+}
+
 
 def brule(c):
     return COMB[c]['brule']
