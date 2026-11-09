@@ -55,11 +55,12 @@ function carteFeu(f, C, sel, E) {
   </div>`;
 }
 
-export function situation(E, C, sel) {
+export function situation(E, C, sel, mode, raison) {
   const m = E.meteo, st = E.stats;
   const actifs = E.feux.filter(f => f.statut !== 'éteint');
   const finis = E.feux.filter(f => f.statut === 'éteint');
   let h = '';
+  if (mode === 'demo') h += `<div class="cos vous"><b>▶ Démo enregistrée</b><span>Le moteur Python n'a pas pu se charger sur cette page${raison ? ' (' + esc(raison) + ')' : ''}. Vous regardez une journée jouée par le vrai moteur : vitesse et pause marchent, mais pas les ordres. Pour jouer : <code>python server.py</code> sur le Pi ou le PC.</span></div>`;
   if (sel.cell != null) h += ficheCellule(E, C, sel.cell);
   if (sel.groupe?.length) h += ficheGroupe(E, sel.groupe);
   else if (sel.moyen != null) { const d = E.moyens.find(u => u.id === sel.moyen); if (d) h += ficheMoyen(d, C, E); }
@@ -149,7 +150,7 @@ export function partie(infos, R, doctrine, mode) {
   if (!infos) return '<p class="sous">Chargement…</p>';
   const opt = (o, v) => Object.entries(o).map(([k, n]) => `<option value="${k}" ${k === v ? 'selected' : ''}>${esc(n)}</option>`).join('');
   const cur = k => { const [a, b] = infos.limites[k]; const v = R.moyens?.[k] ?? infos.defaut[k]; return `<label>${ICONE[k]} ${NOM_TYPE[k]}<span class="curseur"><input type="range" min="${a}" max="${b}" value="${v}" data-m="${k}"><output>${v}</output></span></label>`; };
-  return `<h2>Nouvelle partie</h2><div class="sous">Moteur Python ${mode === 'serveur' ? 'sur le serveur' : 'dans le navigateur (Pyodide)'}</div>
+  return `<h2>Nouvelle partie</h2><div class="sous">Moteur Python ${mode === 'serveur' ? 'sur le serveur' : mode === 'demo' ? 'indisponible ici : démo enregistrée (lecture seule)' : 'dans le navigateur (Pyodide)'}</div>
     <form class="form" id="f-partie">
       <label>Massif<select name="theme">${opt(infos.themes, R.theme)}</select></label>
       <label>Météo du jour<select name="scenario">${opt(infos.scenarios, R.scenario)}</select></label>

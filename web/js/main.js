@@ -55,8 +55,8 @@ function lumiere(minute) {
 // ------------------------------------------------------------------ démarrage
 async function demarrer() {
   L = await choisirLiaison(progres);
-  $('#t-mode').textContent = L.mode === 'serveur' ? 'SERVEUR' : 'NAVIGATEUR';
-  progres(L.mode === 'serveur' ? 'Lecture de la carte…' : 'Chargement de Python (Pyodide)…');
+  $('#t-mode').textContent = { serveur: 'SERVEUR', navigateur: 'NAVIGATEUR', demo: 'DÉMO' }[L.mode];
+  progres('Lecture de la carte…');
   INFOS = await L.infos();
   await chargerCarte();
   boutonsTemps();
@@ -112,7 +112,8 @@ function appliquer(e) {
   }
   for (const j of e.journal) {
     journal.push(j);
-    if (j.k === 'alerte' || j.k === 'sauve' || (j.k === 'cos' && /renfort|Évacuation|Guet|Confinement|abri/.test(j.txt))) toast(j.txt, j.k);
+    const recent = e.meteo.t - j.t < 15;            // pas d'avalanche de bulles au chargement
+    if (recent && (j.k === 'alerte' || j.k === 'sauve' || (j.k === 'cos' && /renfort|Évacuation|Guet|Confinement|abri/.test(j.txt)))) toast(j.txt, j.k);
     if (onglet !== 'journal') nonLus++;
   }
   journal = journal.slice(-200);
@@ -188,7 +189,7 @@ function panneauPeriodique(force) {
 function panneau() {
   if (!E) return;
   const el = $('#contenu'), haut = el.scrollTop;
-  if (onglet === 'situation') el.innerHTML = UI.situation(E, C, sel);
+  if (onglet === 'situation') el.innerHTML = UI.situation(E, C, sel, L.mode, L.raison);
   else if (onglet === 'moyens') el.innerHTML = UI.moyens(E, sel.moyen);
   else if (onglet === 'journal') { el.innerHTML = UI.journal(journal); nonLus = 0; }
   else if (onglet === 'partie') { if (!el.querySelector('#f-partie')) { el.innerHTML = UI.partie(INFOS, E.reglages, E.doctrine, L.mode); initPartie(); } return; }

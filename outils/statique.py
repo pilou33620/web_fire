@@ -19,6 +19,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--sortie', default=os.path.join(ROOT, 'dist'))
     ap.add_argument('--pyodide', help='dossier contenant pyodide.js, pyodide.asm.wasm… (paquet npm « pyodide »)')
+    ap.add_argument('--sans-demo', action='store_true', help='ne pas enregistrer la démo rejouée (secours si Python ne charge pas)')
     ap.add_argument('--cdn', action='store_true', help='Three.js chargé depuis jsDelivr au lieu du dossier vendor/ (page publiée)')
     a = ap.parse_args()
     out = a.sortie
@@ -35,6 +36,10 @@ def main():
             fichiers.append(dict(f='jeu/' + f, u=f[:-3] + '.txt'))
     with open(os.path.join(out, 'py', 'manifest.json'), 'w', encoding='utf-8') as fh:
         json.dump(dict(fichiers=fichiers), fh)
+    if not a.sans_demo:
+        import subprocess
+        import sys
+        subprocess.run([sys.executable, os.path.join(ROOT, 'outils', 'enregistrer.py'), '--sortie', os.path.join(out, 'demo', 'rejeu.json')], check=True)
     if a.cdn:
         shutil.rmtree(os.path.join(out, 'vendor'))
         m = os.path.join(out, 'js', 'moteur.js')

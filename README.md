@@ -17,7 +17,8 @@ python server.py --lan      # ouvert au réseau local (iPad, téléphone) — pr
 `lancer.sh` (Linux, macOS, Termux) et `lancer.bat` (Windows) font la même chose.
 
 **Sans serveur** : `python outils/statique.py` fabrique `dist/`, une version où le même moteur Python tourne dans le
-navigateur grâce à Pyodide (à héberger n'importe où, ou à servir avec `python -m http.server`).
+navigateur grâce à Pyodide (à héberger n'importe où, ou à servir avec `python -m http.server`). Si Python ne peut
+pas se charger, la page rejoue une journée enregistrée du vrai moteur (lecture seule).
 
 ## Ce qu'on voit
 
@@ -104,5 +105,6 @@ Trois doctrines au choix (équilibrée, offensive, défensive). `python outils/b
 | `web/js/plateau.js`, `web/js/modeles.js`, `web/js/moteur.js` | le plateau 3D, les modèles, le moteur de rendu (repris de web_conquete) |
 | `web/js/intervention.js` | le mode Intervention |
 | `web/js/voies.js` | le dessin des routes et des pistes (commun aux deux vues) |
-| `web/js/liaison.js`, `web/js/pyworker.js` | la liaison avec le serveur, ou Pyodide dans le navigateur |
+| `web/js/liaison.js` | la liaison avec le serveur, ou Pyodide dans la page, ou la démo enregistrée |
+| `outils/enregistrer.py`, `outils/statique.py` | la démo rejouée ; la version sans serveur (`dist/`) |
 | `tests/` | `python -m unittest discover -s tests` |
