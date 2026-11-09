@@ -59,6 +59,26 @@ Dans les Landes, les pistes forment le quadrillage DFCI ; en Méditerranée, ell
 vers les routes. Le tracé est nettoyé à la génération : routes qui tournent peu, sans escaliers ni doublons, rien de
 construit ni de planté sur l'emprise des voies.
 
+## Commander au geste : sections et cônes
+
+Les camions vont par **groupe (GIFF)** : 4 CCF et le VLHR du chef de groupe, qui suit et se tient en retrait.
+En mode COS, toucher un camion choisit tout son groupe, et l'ordre « Arroser vers… » est prêt :
+**appuyez** à l'endroit du poste, **glissez** vers le feu pour orienter les lances, **relâchez** pour donner l'ordre.
+Pendant le geste, l'aperçu montre le trajet prévu (pointillés), les postes (anneaux), le **cône des lances** (bleu),
+les hexagones arrosés (bleu) ou trop chauds pour être tenus (rouge), l'eau du groupe et son autonomie.
+Ça marche au doigt, à la souris et **au stylet** (au survol du stylet, le poste s'affiche déjà), sur la carte comme
+dans la vue Intervention.
+
+Les quatre modes d'un groupe :
+- 🎯 **Arroser vers…** : le groupe se poste en ligne face à la direction choisie et n'arrose que dans son cône ;
+- ➖ **Ligne d'arrêt** : on trace la ligne, les camions s'y étalent face au feu ; sans flammes à portée, ils mouillent la végétation devant eux ;
+- 🛡 **Protéger à 360°** : autour d'un village ou d'un camping, ils arrosent tout ce qui approche ;
+- ↗ **Attaque de flanc** : le groupe remonte seul le flanc vers la tête, de poste en poste, en gardant le feu dans son cône.
+
+Les avions se commandent pareil : appuyer sur le point de largage, glisser pour orienter l'**axe de la passe**
+(Canadair : deux hexagones le long de l'axe ; Dash : une ligne de retardant de cinq hexagones), relâcher. L'aperçu
+montre l'empreinte du largage, le point d'écopage et la route de vol. Les Canadair volent par patrouilles de deux.
+
 ## Évacuations
 
 Chaque site menacé peut être **évacué** (🚗 convois de 300 personnes qui partent toutes les 3 minutes vers une ville

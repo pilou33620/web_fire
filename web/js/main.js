@@ -4,6 +4,7 @@ import { Plateau, Flotte, Convois } from './plateau.js';
 import { Intervention } from './intervention.js';
 import { choisirLiaison } from './liaison.js';
 import * as UI from './ui.js';
+import { Commande, eventail } from './commande.js';
 
 const $ = s => document.querySelector(s);
 const zone = $('#zone'), toile = $('#scene'), ETI = $('#etiquettes'), bulle = $('#bulle');
@@ -79,6 +80,11 @@ async function chargerCarte() {
   etiquettesSites();
   seq = 0; journal = []; E = null; sel.feu = sel.cell = sel.moyen = sel.groupe = null;
   inter?.quitter(); inter = new Intervention(renderer, C, P, zone);
+  const vi = inter.vue();
+  inter.camera.onPress = (cx, cy) => (inter.tapMoyen(cx, cy) != null ? false : CMD.press(vi, cx, cy));
+  inter.camera.onDrag = (cx, cy) => CMD.drag(vi, cx, cy);
+  inter.camera.onRelease = (cx, cy, annule) => CMD.release(vi, cx, cy, annule);
+  inter.camera.onHover = (cx, cy) => { if (cx != null && CMD.arme) CMD.survol(vi, cx, cy); };
 }
 
 // ------------------------------------------------------------------ interrogation du moteur
@@ -210,31 +216,34 @@ $('#contenu').addEventListener('click', async e => {
     if (o.dataset.conf) { await L.action({ type: 'confiner', site: +o.dataset.conf }); return; }
     if (o.dataset.cos) { await L.action({ type: 'commandement', valeur: o.dataset.cos }); return; }
     if (o.dataset.renfort !== undefined) { const r = await L.action({ type: 'renfort' }); toast(r.ok ? 'Colonne de renfort demandée : arrivée dans 45 min.' : r.erreur, 'cos'); return; }
-    if (o.dataset.groupe) { sel.groupe = E.moyens.filter(d => d.g === o.dataset.groupe).map(d => d.id); sel.moyen = null; montrerSituation(); return; }
+    if (o.dataset.groupe) { const d = E.moyens.find(x => x.g === o.dataset.groupe); if (d) choisirMoyen(d); montrerSituation(); return; }
     if (o.dataset.tous) { sel.groupe = E.moyens.filter(d => d.k === o.dataset.tous).map(d => d.id); sel.moyen = null; montrerSituation(); return; }
-    if (o.dataset.deselect !== undefined) { sel.groupe = null; panneau(); return; }
+    if (o.dataset.deselect !== undefined) { sel.groupe = null; desarmer(); visee(null); panneau(); return; }
   }
   const t = e.target.closest('[data-inter],[data-centrer],[data-feu],[data-moyen]'); if (!t) return;
   if (t.dataset.inter) { entrerIntervention(+t.dataset.inter); return; }
   if (t.dataset.centrer) { centrerFeu(+t.dataset.centrer); return; }
   if (t.dataset.feu) { sel.feu = +t.dataset.feu; centrerFeu(sel.feu); panneau(); return; }
-  if (t.dataset.moyen) { sel.moyen = +t.dataset.moyen; sel.cell = null; sel.groupe = null; const o = F.u.get(sel.moyen); if (o?.pos) camera.aller(o.pos[0], o.pos[2], Math.min(camera.dist, 320)); onglet = 'situation'; document.querySelector('[data-o=situation]').click(); }
+  if (t.dataset.moyen) { const d = E.moyens.find(x => x.id === +t.dataset.moyen); if (d) choisirMoyen(d); const o = F.u.get(+t.dataset.moyen); if (o?.pos) camera.aller(o.pos[0], o.pos[2], Math.min(camera.dist, 320)); onglet = 'situation'; document.querySelector('[data-o=situation]').click(); }
 });
 function montrerSituation() { if (onglet !== 'situation') document.querySelector('[data-o=situation]').click(); else panneau(); }
 // ------------------------------------------------------------------ ordres du joueur
 function ordre(o, ids) {
-  const [ic, nom, cibles] = UI.ORDRES[o];
+  const [ic, nom, cibles, aide] = UI.ORDRES[o];
   if (!cibles) { L.action({ type: 'ordre', moyens: ids, ordre: o }).then(r => { if (!r.ok) toast(r.erreur, 'alerte'); }); return; }
-  viser = { type: 'ordre', ordre: o, ids, cells: [], n: cibles };
-  visee(`${ic} ${nom} : touchez ${cibles === 2 ? 'le point de départ du pare-feu' : o === 'defendre' ? 'le site à défendre' : 'l\'endroit visé'} sur la carte.`);
+  viser = null;
+  CMD.armer(o, ids, [...new Set(E.moyens.filter(d => ids.includes(d.id)).map(d => d.k))]);
+  sel.arme = o;
+  visee(`${ic} ${nom} — ${aide}`);
+  panneau();
 }
+function desarmer() { CMD.desarmer(); sel.arme = null; }
 function visee(txt) {
   const v = $('#visee');
   if (!txt) { v.hidden = true; toile.classList.remove('viser'); return; }
   v.hidden = false; $('#visee-txt').textContent = txt; toile.classList.add('viser');
-  if (inter?.actif) quitterIntervention();
 }
-$('#visee-annuler').onclick = () => { viser = null; visee(null); $('#b-allumer').setAttribute('aria-pressed', 'false'); };
+$('#visee-annuler').onclick = () => { viser = null; desarmer(); visee(null); $('#b-allumer').setAttribute('aria-pressed', 'false'); panneau(); };
 $('#b-cos').onclick = () => L.action({ type: 'commandement', valeur: E?.commandement === 'manuel' ? 'auto' : 'manuel' });
 function initPartie() {
   const f = $('#f-partie');
@@ -325,6 +334,47 @@ function majEchelle() {
   $('#ech-txt').textContent = m >= 1000 ? m / 1000 + ' km' : m + ' m'; $('#ech-regle').style.width = Math.round(m / mPx) + 'px';
 }
 
+// ------------------------------------------------------------------ commandement au geste (doigt, stylet, souris)
+const apercuCarte = new THREE.Group(); scene.add(apercuCarte);
+const conesG = new THREE.Group(); scene.add(conesG);
+const vueCarte = {
+  cellule: (cx, cy) => celluleSous(cx, cy),
+  sol: (cx, cy) => { const i = celluleSous(cx, cy); return i < 0 ? null : [PT.x, PT.z]; },
+  pos: i => (i == null || i < 0 ? null : [P.X[i], Math.max(P.top[i], -0.9), P.Z[i]]),
+  posM: (mx, my) => { const [x, z] = P.vers3D(mx, my), i = P.cellule(x, z); return [x, i >= 0 ? Math.max(P.top[i], -0.9) : 0, z]; },
+  voisins: i => P.voisins(i),
+  get R() { return 10; }, groupe: apercuCarte,
+  ecran: (x, y, z) => ecran(x, y, z),
+};
+const CMD = new Commande({ L: { action: a => L.action(a) }, getE: () => E, get C() { return C; }, toast: (t, k) => toast(t, k), zone,
+  surOrdre: r => { if (r.ok) $('#visee-txt').textContent = '✓ Ordre donné. Appuyez de nouveau pour en donner un autre, ou ✕ pour terminer.'; panneauPeriodique(true); } });
+Object.defineProperty(CMD, 'C', { get: () => C });
+camera.onPress = (cx, cy) => { if (inter?.actif || !P || moyenSous(cx, cy)) return false; return CMD.press(vueCarte, cx, cy); };
+camera.onDrag = (cx, cy) => CMD.drag(vueCarte, cx, cy);
+camera.onRelease = (cx, cy, annule) => CMD.release(vueCarte, cx, cy, annule);
+// choisir un moyen : un camion ou un chef choisit tout son groupe ; en mode COS, l'ordre par défaut est prêt
+function choisirMoyen(d) {
+  sel.cell = null;
+  if ((d.k === 'ccf' || d.k === 'vlhr') && d.g) { sel.groupe = E.moyens.filter(x => x.g === d.g).map(x => x.id); sel.moyen = null; }
+  else { sel.moyen = d.id; sel.groupe = null; }
+  if (E.commandement === 'manuel') {
+    const ids = sel.groupe ? E.moyens.filter(x => sel.groupe.includes(x.id) && x.k !== 'vlhr').map(x => x.id) : [d.id];
+    ordre(UI.ORDRE_DEFAUT[d.k], ids);
+  } else { desarmer(); visee(null); }
+}
+// les cônes des groupes sous vos ordres (et du groupe choisi)
+function majCones() {
+  while (conesG.children.length) { const m = conesG.children.pop(); m.geometry.dispose(); m.material.dispose(); }
+  if (!E) return;
+  for (const o of F.u.values()) {
+    const d = o.d;
+    if (d.dir == null || !o.pos || d.e !== 'action' || d.k !== 'ccf') continue;
+    const choisi = sel.groupe?.includes(d.id);
+    if (!choisi && !(voirMissions && d.j)) continue;
+    const m = eventail(16, d.dir, 50, choisi ? 0.3 : 0.15); m.position.set(o.pos[0], o.pos[1] + 0.7, o.pos[2]); conesG.add(m);
+  }
+}
+
 // ------------------------------------------------------------------ gestes : survol, choix, allumer
 const ray = new THREE.Raycaster(), PL = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), PT = new THREE.Vector3(), NDC = new THREE.Vector2();
 function celluleSous(cx, cy) {
@@ -340,6 +390,7 @@ function moyenSous(cx, cy) {
 }
 camera.onHover = (cx, cy) => {
   if (inter?.actif) return;
+  if (cx != null && P && CMD.arme && !moyenSous(cx, cy)) { CMD.survol(vueCarte, cx, cy); }
   if (cx == null || !P) { bulle.hidden = true; P && (P.survol.visible = false); return; }
   const o = moyenSous(cx, cy);
   if (o) { bulle.hidden = false; bulle.innerHTML = `<b>${UI.ICONE[o.d.k]} ${UI.esc(o.d.n)}</b><br>${UI.esc(UI.etatMoyen(o.d))}${o.d.m ? ' · ' + UI.esc(o.d.m) : ''}`; }
@@ -356,25 +407,15 @@ camera.onHover = (cx, cy) => {
   camera.sale = true;
 };
 camera.onTap = async (cx, cy) => {
-  if (inter?.actif) { inter.tap(cx, cy); return; }
+  if (inter?.actif) { const id = inter.tap(cx, cy); const d = id != null && E.moyens.find(x => x.id === id); if (d) { choisirMoyen(d); montrerSituation(); } return; }
   const i = celluleSous(cx, cy);
   if (viser?.type === 'allumer') {
     viser = null; $('#b-allumer').setAttribute('aria-pressed', 'false'); visee(null);
     if (i >= 0) { const r = await L.action({ type: 'allumer', cell: i }); if (!r.ok) toast(r.erreur || 'Impossible ici', 'info'); }
     return;
   }
-  if (viser?.type === 'ordre') {
-    if (i < 0) return;
-    viser.cells.push(i);
-    if (viser.cells.length < viser.n) { visee('🚧 Pare-feu : touchez maintenant le point d\'arrivée.'); P.choix.visible = true; P.choix.position.set(P.X[i], P.top[i] + 0.45, P.Z[i]); return; }
-    const v = viser; viser = null; visee(null);
-    const r = await L.action({ type: 'ordre', moyens: v.ids, ordre: v.ordre, cell: v.cells[0], cell2: v.cells[1] });
-    if (!r.ok) toast(r.erreur, 'alerte'); else if (r.refus?.length) toast(`Ordre impossible pour : ${r.refus.join(', ')}.`, 'info');
-    P.choix.visible = true; P.choix.position.set(P.X[i], P.top[i] + 0.45, P.Z[i]);
-    return;
-  }
   const o = moyenSous(cx, cy);
-  if (o) { sel.moyen = o.d.id; sel.cell = null; sel.groupe = null; }
+  if (o) choisirMoyen(o.d);
   else if (i >= 0) {
     sel.moyen = null; sel.cell = i;
     P.choix.visible = true; P.choix.position.set(P.X[i], P.top[i] + 0.45, P.Z[i]);
@@ -429,6 +470,7 @@ function boucle() {
   if (inter?.actif) {
     inter.anime(dt, t, now, dureeInterp);
     renderer.render(inter.scene, inter.cam);
+    CMD.placer();
   } else if (P) {
     camera.anime(dt);
     P.reconstruire(2);
@@ -436,7 +478,8 @@ function boucle() {
     P.anime(dt, t, { x: -Math.sin(de), z: Math.cos(de), v: E?.meteo.vent ?? 10 });
     F.anime(dt, t, now, dureeInterp, P, true);
     CV.anime(dt, t, now, dureeInterp);
-    if (now - traitsT > 400) { F.traits(voirMissions); traitsT = now; }
+    if (now - traitsT > 400) { F.traits(voirMissions); majCones(); traitsT = now; }
+    CMD.placer();
     const dec = soleil.userData.dec || new THREE.Vector3(-170, 300, 160);
     soleil.position.copy(camera.cible).add(dec); soleil.target.position.copy(camera.cible);
     const r = clamp(camera.dist * 0.45, 120, 520); Object.assign(soleil.shadow.camera, { left: -r, right: r, top: r, bottom: -r }); soleil.shadow.camera.updateProjectionMatrix();
@@ -448,4 +491,5 @@ function boucle() {
 
 demarrer().catch(err => { console.error(err); progres('Erreur : ' + err.message); });
 window.__feux = { get E() { return E; }, get C() { return C; }, get P() { return P; }, camera, get L() { return L; }, entrerIntervention, quitterIntervention, get inter() { return inter; },
-  choisirCellule(i) { sel.cell = i; sel.moyen = null; sel.groupe = null; montrerSituation(); } };
+  choisirCellule(i) { sel.cell = i; sel.moyen = null; sel.groupe = null; montrerSituation(); },
+  choisirMoyen(id) { const d = E.moyens.find(x => x.id === id); if (d) { choisirMoyen(d); montrerSituation(); } }, ecran: (x, y, z) => ecran(x, y, z) };

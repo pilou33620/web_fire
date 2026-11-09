@@ -135,6 +135,65 @@ class TestOrdres(unittest.TestCase):
         self.assertFalse(p.action(dict(type='ordre', moyens=[canadair.id], ordre='attaquer', cell=cellule_centrale(p)))['ok'])
 
 
+class TestSections(unittest.TestCase):
+    def test_giff_quatre_camions_et_un_chef(self):
+        p = partie_calme()
+        chefs = [u for u in p.moyens if u.kind == 'vlhr']
+        self.assertEqual(len(chefs), 4)
+        for ch in chefs:
+            self.assertEqual(sum(1 for u in p.moyens if u.kind == 'ccf' and u.groupe == ch.groupe), 4)
+
+    def _feu_et_section(self):
+        p = partie_calme()
+        p.meteo.sc['vent'] = 5
+        p.meteo.maj()
+        i0 = cellule_centrale(p)
+        p.feu.allumer(i0, t=0)
+        for _ in range(6):
+            p.pas()
+        return p, i0, [u.id for u in p.moyens if u.kind == 'ccf' and u.groupe == 'GIFF 1']
+
+    def test_le_cone_limite_l_arrosage(self):
+        from jeu.moyens import dans_cone, CONE
+        p, i0, ids = self._feu_et_section()
+        g = p.carte.g
+        r = p.action(dict(type='ordre', moyens=ids, ordre='arroser', cell=i0, dir=0))
+        self.assertTrue(r['ok'])
+        for _ in range(40):
+            p.pas()
+            for u in p.moyens:
+                if u.id in ids and u.act and u.act.get('k') == 'arrose':
+                    self.assertTrue(dans_cone(g, u.cell, u.act['c'], (0, CONE)))
+
+    def test_ligne_d_arret_etalee(self):
+        p, i0, ids = self._feu_et_section()
+        g = p.carte.g
+        a = g.sous(g.cx[i0] - 3 * g.hex_m, g.cy[i0] + 2 * g.hex_m)
+        b = g.sous(g.cx[i0] + 3 * g.hex_m, g.cy[i0] + 2 * g.hex_m)
+        p.action(dict(type='ordre', moyens=ids, ordre='ligne', cell=a, cell2=b))
+        postes = {u.mission['poste'] for u in p.moyens if u.id in ids}
+        self.assertGreaterEqual(len(postes), 3)
+
+    def test_apercu_sans_effet(self):
+        p, i0, ids = self._feu_et_section()
+        avant = [(u.mission, u.joueur) for u in p.moyens]
+        r = p.action(dict(type='apercu', moyens=ids, ordre='arroser', cell=i0, dir=90))
+        self.assertTrue(r['ok'])
+        self.assertEqual(len(r['moyens']), 4)
+        self.assertTrue(all(e['chemin'] and e['portee'] for e in r['moyens']))
+        self.assertEqual(avant, [(u.mission, u.joueur) for u in p.moyens])
+
+    def test_axe_du_canadair(self):
+        p, i0, _ = self._feu_et_section()
+        g = p.carte.g
+        can = next(u for u in p.moyens if u.kind == 'canadair')
+        r = p.action(dict(type='apercu', moyens=[can.id], ordre='larguer', cell=i0, dir=0))
+        cells = r['moyens'][0]['largage']
+        self.assertEqual(len(cells), 2)
+        self.assertLess(abs(g.cy[cells[0]] - g.cy[cells[1]]), 1)      # axe est-ouest : même ligne
+        self.assertIsNotNone(r['moyens'][0]['ecopage'])
+
+
 class TestEvacuation(unittest.TestCase):
     def test_evacuer_puis_arriver(self):
         p = partie_calme(SANS_MOYENS)

@@ -50,9 +50,14 @@ class Partie:
     def _creer_moyens(self):
         c, cm = self.carte, self.config_moyens
         cas = c.casernes or [dict(id=0, nom='Caserne', cell=c.g.n // 2)]
+        # les camions vont par groupes (GIFF) : 4 CCF et le VLHR du chef de groupe, partis de la même caserne
         for k in range(cm['ccf']):
-            ca = cas[k % len(cas)]
             giff = k // 4 + 1
+            ca = cas[(giff - 1) % len(cas)]
+            if k % 4 == 0:
+                chef = Moyen(len(self.moyens), 'vlhr', f'Chef GIFF {giff}', ca['cell'], c)
+                chef.groupe = f'GIFF {giff}'
+                self.moyens.append(chef)
             u = Moyen(len(self.moyens), 'ccf', f'CCF {giff}.{k % 4 + 1}', ca['cell'], c)
             u.groupe = f'GIFF {giff}'
             self.moyens.append(u)
@@ -64,7 +69,9 @@ class Partie:
             self.moyens.append(Moyen(len(self.moyens), 'helico', f'HBE {k + 1}', heli, c))
         aero = c.aerodrome if c.aerodrome is not None else cas[0]['cell']
         for k in range(cm['canadair']):
-            self.moyens.append(Moyen(len(self.moyens), 'canadair', f'Pélican {31 + k}', aero, c))
+            u = Moyen(len(self.moyens), 'canadair', f'Pélican {31 + k}', aero, c)
+            u.groupe = f'Patrouille {k // 2 + 1}'          # les Canadair volent par deux
+            self.moyens.append(u)
         for k in range(cm['dash']):
             self.moyens.append(Moyen(len(self.moyens), 'dash', f'Milan {71 + k}', aero, c))
 
@@ -83,12 +90,44 @@ class Partie:
                       [i for i in range(g.n) if g.col_row(i)[0] == g.cols - 1 and c.fuel[i] not in EAU]
             e = entrees[0] if entrees else (c.casernes[0]['cell'] if c.casernes else 0)
             self.stats['renforts'] += 1
+            chef = Moyen(len(self.moyens), 'vlhr', f'Chef colonne {self.stats["renforts"]}', e, c)
+            chef.renfort = True
+            chef.groupe = f'Colonne {self.stats["renforts"]}'
+            self.moyens.append(chef)
             for k in range(nb):
                 u = Moyen(len(self.moyens), 'ccf', f'CCF R{self.stats["renforts"]}.{k + 1}', e, c)
                 u.renfort = True
                 u.groupe = f'Colonne {self.stats["renforts"]}'
                 self.moyens.append(u)
             self.journal_ajout('cos', f"La colonne de renfort n° {self.stats['renforts']} arrive ({nb} CCF).")
+
+    def _chefs(self):
+        """Chaque VLHR suit son groupe : il se poste en retrait du poste le plus tenu par ses camions."""
+        g = self.carte.g
+        groupes = {}
+        for u in self.moyens:
+            if u.kind == 'ccf' and getattr(u, 'groupe', None) and u.mission and u.mission.get('poste') is not None:
+                groupes.setdefault(u.groupe, []).append(u)
+        for chef in self.moyens:
+            if chef.kind != 'vlhr':
+                continue
+            l = groupes.get(chef.groupe)
+            if not l:
+                chef.mission, chef.joueur = None, False
+                continue
+            postes = [u.mission['poste'] for u in l]
+            poste = max(set(postes), key=postes.count)
+            d = l[0].mission.get('dir')
+            retrait = poste
+            if d is not None:
+                a = math.radians(d + 180)
+                j = g.sous(g.cx[poste] + math.cos(a) * g.hex_m, g.cy[poste] + math.sin(a) * g.hex_m)
+                if j is not None and self.feu.etat[j] != BRULE and self.carte.fuel[j] not in EAU:
+                    retrait = j
+            lab = l[0].mission.get('label', '')
+            if not chef.mission or chef.mission.get('poste') != retrait:
+                chef.mission = dict(type='escorte', poste=retrait, label='Commande : ' + lab)
+            chef.joueur = any(u.joueur for u in l)
 
     def point_eau_proche(self, cell):
         """Point d'eau terrestre le plus proche (borne, citerne DFCI, caserne)."""
@@ -218,6 +257,7 @@ class Partie:
             if feu.I[i] > 0.55:
                 self.danger.update(g.voisins(i))
         self.ia.pas()
+        self._chefs()
         for u in self.moyens:
             u.pas(self)
         self.evac.pas()
@@ -250,10 +290,12 @@ class Partie:
             self.meteo.maj()
             self.journal_ajout('info', f"Le vent tourne : du {self.meteo.de}° à {round(self.meteo.vent)} km/h.")
             return dict(ok=True)
-        if typ == 'ordre':
-            return ordres.donner(self, [int(x) for x in a.get('moyens', [])], a.get('ordre'),
-                                 None if a.get('cell') is None else int(a['cell']),
-                                 None if a.get('cell2') is None else int(a['cell2']))
+        if typ in ('ordre', 'apercu'):
+            f = ordres.donner if typ == 'ordre' else ordres.apercu
+            return f(self, [int(x) for x in a.get('moyens', [])], a.get('ordre'),
+                     None if a.get('cell') is None else int(a['cell']),
+                     None if a.get('cell2') is None else int(a['cell2']),
+                     None if a.get('dir') is None else float(a['dir']))
         if typ == 'commandement':
             v = 'manuel' if a.get('valeur') == 'manuel' else 'auto'
             if v != self.ia.mode:

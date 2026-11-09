@@ -1,23 +1,32 @@
 // Le panneau de droite : situation (météo, bilan, feux), moyens, journal du commandement, réglages de la partie.
 export const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 export const nf = n => Math.round(n).toLocaleString('fr-FR');
-export const ICONE = { ccf: '🚒', bull: '🚜', helico: '🚁', canadair: '🛩', dash: '✈️' };
-export const NOM_TYPE = { ccf: 'Camions-citernes feux de forêt', bull: 'Bulldozers', helico: 'Hélicoptères bombardiers d\'eau', canadair: 'Canadair', dash: 'Dash 8 (retardant)' };
+export const ICONE = { ccf: '🚒', vlhr: '🚙', bull: '🚜', helico: '🚁', canadair: '🛩', dash: '✈️' };
+export const NOM_TYPE = { ccf: 'Camions-citernes feux de forêt', vlhr: 'Chefs de groupe (VLHR)', bull: 'Bulldozers', helico: 'Hélicoptères bombardiers d\'eau', canadair: 'Canadair', dash: 'Dash 8 (retardant)' };
 const RISQUE_COUL = { Faible: '#7be08a', 'Léger': '#b9e07b', 'Modéré': '#ffd34d', 'Sévère': '#ff9a3c', 'Très sévère': '#ff6a3a', Exceptionnel: '#e0403a' };
 export const risqueCouleur = n => RISQUE_COUL[n] || '#ffc94d';
 const STATUT = { 'non détecté': ['#d7c9b4', 'Non détecté'], naissant: ['#ffb02e', 'Naissant'], 'en progression': ['#ff6a3a', 'En progression'], 'fixé': ['#ffd34d', 'Fixé'], 'maîtrisé': ['#7be08a', 'Maîtrisé'], 'éteint': ['#9aa39a', 'Éteint'] };
 export const statut = s => STATUT[s] || ['#ccc', s];
 const SITE_ETAT = { sauf: ['ok', 'Sauf'], 'menacé': ['alerte', 'Menacé'], 'touché': ['chaud', 'Touché'], 'détruit': ['chaud', 'Détruit'] };
+// [icône, nom, cible (0 : aucune, 1 : un point, 2 : un point et une orientation ou une fin), aide du geste]
 export const ORDRES = {
-  poster: ['📍', 'Se poster ici', 1], attaquer: ['🔥', 'Attaquer ici', 1], defendre: ['🛡', 'Défendre un site', 1], surveiller: ['👁', 'Surveiller ici', 1],
-  larguer: ['💧', 'Larguer ici', 1], retardant: ['🟥', 'Ligne de retardant ici', 1], pare_feu: ['🚧', 'Pare-feu (2 points)', 2],
-  retour: ['↩', 'Retour à la base', 0], liberer: ['🤖', 'Rendre à l\'IA', 0],
+  arroser: ['🎯', 'Arroser vers…', 2, 'Appuyez à l\'endroit du poste, glissez vers le feu pour orienter les lances, relâchez.'],
+  ligne: ['➖', 'Ligne d\'arrêt', 2, 'Appuyez au début de la ligne, glissez jusqu\'à sa fin, relâchez : les camions s\'y étalent face au feu.'],
+  proteger: ['🛡', 'Protéger à 360°', 1, 'Touchez la maison, le village ou le camping à protéger.'],
+  flanc: ['↗', 'Attaque de flanc', 2, 'Appuyez au point de départ, glissez vers le feu, relâchez : le groupe remontera le flanc vers la tête.'],
+  poster: ['📍', 'Se poster ici', 1, 'Touchez l\'endroit où attendre.'],
+  surveiller: ['👁', 'Surveiller ici', 1, 'Touchez la lisière à surveiller et noyer.'],
+  larguer: ['💧', 'Larguer (axe)', 2, 'Appuyez sur le point de largage, glissez pour orienter l\'axe de la passe, relâchez.'],
+  retardant: ['🟥', 'Ligne de retardant', 2, 'Appuyez au milieu de la ligne, glissez pour l\'orienter, relâchez.'],
+  pare_feu: ['🚧', 'Pare-feu', 2, 'Appuyez au début du pare-feu, glissez jusqu\'à sa fin, relâchez.'],
+  retour: ['↩', 'Retour à la base', 0, ''], liberer: ['🤖', 'Rendre à l\'IA', 0, ''],
 };
-export const ORDRES_TYPE = { ccf: ['poster', 'attaquer', 'defendre', 'surveiller'], bull: ['poster', 'pare_feu'], helico: ['larguer'], canadair: ['larguer'], dash: ['retardant'] };
+export const ORDRES_TYPE = { ccf: ['arroser', 'ligne', 'proteger', 'flanc', 'poster', 'surveiller'], vlhr: [], bull: ['poster', 'pare_feu'], helico: ['larguer'], canadair: ['larguer'], dash: ['retardant'] };
+export const ORDRE_DEFAUT = { ccf: 'arroser', vlhr: 'arroser', bull: 'pare_feu', helico: 'larguer', canadair: 'larguer', dash: 'retardant' };
 const EVAC = { normal: '', evacuation: 'évacuation en cours', confinement: 'à l\'abri sur place', evacue: 'évacué' };
-export function boutonsOrdres(kinds, ids) {
+export function boutonsOrdres(kinds, ids, arme) {
   const l = [...new Set(kinds.flatMap(k => ORDRES_TYPE[k]))].concat(['retour', 'liberer']);
-  return `<div class="ordres" data-ids="${ids.join(',')}">` + l.map(o => `<button type="button" class="btn" data-ordre="${o}" title="${esc(ORDRES[o][1])}">${ORDRES[o][0]} ${esc(ORDRES[o][1])}</button>`).join('') + '</div>';
+  return `<div class="ordres" data-ids="${ids.join(',')}">` + l.map(o => `<button type="button" class="btn ${arme === o ? 'prim' : ''}" data-ordre="${o}" title="${esc(ORDRES[o][3] || ORDRES[o][1])}">${ORDRES[o][0]} ${esc(ORDRES[o][1])}</button>`).join('') + '</div>';
 }
 function boutonsSite(E, sid) {
   const ev = E.evac?.sites[sid]; if (!ev) return '';
@@ -34,7 +43,7 @@ export function etatMoyen(d) {
   const a = d.a?.k;
   const A = { arrose: 'arrose le feu', noie: 'noie les lisières', protege: 'protège les maisons', remplit: 'fait le plein d\'eau', va_remplir: 'va remplir sa citerne',
     ecope: d.k === 'canadair' ? 'écope' : 'puise de l\'eau', largue: 'largue !', vol: 'en vol', au_sol: 'au sol', defriche: 'ouvre le pare-feu', attend: 'en position',
-    surveille: 'surveille', patrouille: 'patrouille', alerte: d.k === 'ccf' || d.k === 'bull' ? 'départ de la caserne' : 'décollage' };
+    surveille: 'surveille', patrouille: 'patrouille', mouille: 'mouille devant la ligne', commande: 'commande le groupe', alerte: d.k === 'ccf' || d.k === 'bull' ? 'départ de la caserne' : 'décollage' };
   if (a && A[a]) return A[a];
   return { dispo: 'disponible', route: 'en route', action: 'en action', ravitaillement: 'ravitaillement', au_sol: 'au sol', retour: 'retour à la base', alerte: 'alerte' }[d.e] || d.e;
 }
@@ -62,7 +71,7 @@ export function situation(E, C, sel, mode, raison) {
   let h = '';
   if (mode === 'demo') h += `<div class="cos vous"><b>▶ Démo enregistrée</b><span>Le moteur Python n'a pas pu se charger sur cette page${raison ? ' (' + esc(raison) + ')' : ''}. Vous regardez une journée jouée par le vrai moteur : vitesse et pause marchent, mais pas les ordres. Pour jouer : <code>python server.py</code> sur le Pi ou le PC.</span></div>`;
   if (sel.cell != null) h += ficheCellule(E, C, sel.cell);
-  if (sel.groupe?.length) h += ficheGroupe(E, sel.groupe);
+  if (sel.groupe?.length) h += ficheGroupe(E, sel.groupe, sel.arme);
   else if (sel.moyen != null) { const d = E.moyens.find(u => u.id === sel.moyen); if (d) h += ficheMoyen(d, C, E); }
   const manuel = E.commandement === 'manuel';
   h += `<div class="cos ${manuel ? 'vous' : ''}"><b>${manuel ? '🧑‍🚒 Le COS, c\'est vous' : '🤖 Le COS est l\'IA'}</b><span>${manuel ? 'L\'IA ne fait que signaler les menaces. Choisissez un moyen (carte ou onglet Moyens) et donnez-lui un ordre.' : 'Vous pouvez quand même donner des ordres : le moyen passe sous vos ordres jusqu\'à ce que vous le rendiez.'}</span>
@@ -111,14 +120,17 @@ export function ficheMoyen(d, C, E) {
   return `<div class="carte-feu choisi fiche"><div class="tete"><b>${ICONE[d.k]} ${esc(d.n)}</b><span class="sous">${d.j ? '🧑‍🚒 vos ordres' : '🤖 IA'}${d.r ? ' · renfort' : ''}</span></div>
     <div class="chips"><span class="chip">${esc(etatMoyen(d))}</span>${d.eau != null ? `<span class="chip">💧 ${d.eau} %</span>` : ''}${d.m ? `<span class="chip">${esc(d.m)}</span>` : ''}</div>
     <dl class="lignes">${f ? `<dt>Feu</dt><dd>${esc(f.nom)}</dd>` : ''}${d.g ? `<dt>Groupe</dt><dd>${esc(d.g)} <button type="button" class="mini" data-groupe="${esc(d.g)}">choisir le groupe</button></dd>` : ''}<dt>Eau projetée</dt><dd>${nf(d.l / 1000)} m³</dd></dl>
-    ${boutonsOrdres([d.k], [d.id])}</div>`;
+    ${d.k === 'vlhr' ? '<p class="note">Le chef suit son groupe : donnez vos ordres au groupe.</p>' : boutonsOrdres([d.k], [d.id], null)}</div>`;
 }
-export function ficheGroupe(E, ids) {
+export function ficheGroupe(E, ids, arme) {
   const l = E.moyens.filter(d => ids.includes(d.id));
   if (!l.length) return '';
+  const eau = l.filter(d => d.eau != null), moy = eau.length ? Math.round(eau.reduce((s, d) => s + d.eau, 0) / eau.length) : null;
+  const auto = l.filter(d => d.k === 'ccf').reduce((s, d) => s + d.eau * 40, 0) / Math.max(1, l.filter(d => d.k === 'ccf').length) / 400;
   return `<div class="carte-feu choisi fiche"><div class="tete"><b>${esc(l[0].g || 'Groupe')} · ${l.length} engins</b><button type="button" class="mini" data-deselect>✕</button></div>
-    <ul>${l.map(d => `<li><span>${ICONE[d.k]} ${esc(d.n)}</span><span>${esc(etatMoyen(d))}${d.j ? ' · vos ordres' : ''}</span></li>`).join('')}</ul>
-    ${boutonsOrdres([...new Set(l.map(d => d.k))], l.map(d => d.id))}</div>`;
+    ${moy != null ? `<div class="chips"><span class="chip">💧 ${moy} % en moyenne</span>${l[0].k === 'ccf' || l[0].k === 'vlhr' ? `<span class="chip">≈ ${Math.round(auto)} min de lance</span>` : ''}</div>` : ''}
+    <ul>${l.map(d => `<li><span>${ICONE[d.k]} ${esc(d.n)}</span><span>${d.eau != null ? d.eau + ' % · ' : ''}${esc(etatMoyen(d))}${d.j ? ' · 🧑‍🚒' : ''}</span></li>`).join('')}</ul>
+    ${boutonsOrdres([...new Set(l.map(d => d.k))], l.filter(d => d.k !== 'vlhr').map(d => d.id), arme)}</div>`;
 }
 
 export function bonusMalus(v) {
@@ -130,7 +142,7 @@ export function moyens(E, sel) {
   const par = {};
   for (const d of E.moyens) (par[d.k] ||= []).push(d);
   let h = `<h2>Les moyens</h2><div class="sous">${E.moyens.length} engins · touchez-en un pour le suivre</div>`;
-  for (const k of ['ccf', 'bull', 'helico', 'canadair', 'dash']) {
+  for (const k of ['ccf', 'vlhr', 'bull', 'helico', 'canadair', 'dash']) {
     const l = par[k]; if (!l) continue;
     const eng = l.filter(d => d.m).length;
     const grp = [...new Set(l.map(d => d.g).filter(Boolean))];

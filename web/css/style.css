@@ -150,7 +150,7 @@ h3 { font-family: var(--titre); font-weight: 600; font-size: 15px; margin: 16px 
 .cos.vous { background: #3a2a14; border-color: var(--or); }
 .cos .bas { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .journal li.joueur { background: #2a3550; }
-.visee { left: 50%; transform: translateX(-50%); top: 62px; display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 14px; background: var(--creme); color: var(--trait); font-weight: 800; font-size: 13px; max-width: calc(100% - 24px); }
+.visee { left: 50%; transform: translateX(-50%); top: 62px; width: min(620px, calc(100% - 24px)); line-height: 1.35; display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 14px; background: var(--creme); color: var(--trait); font-weight: 800; font-size: 13px; max-width: calc(100% - 24px); }
 .outils button#b-cos[aria-pressed="true"] { background: #ffb02e; color: var(--trait); }
 
 @media (max-width: 900px) {
