@@ -79,6 +79,14 @@ Les avions se commandent pareil : appuyer sur le point de largage, glisser pour 
 (Canadair : deux hexagones le long de l'axe ; Dash : une ligne de retardant de cinq hexagones), relâcher. L'aperçu
 montre l'empreinte du largage, le point d'écopage et la route de vol. Les Canadair volent par patrouilles de deux.
 
+## Autoprotection des camions
+
+Chaque CCF garde une **réserve d'autoprotection de 500 L** que les lances n'utilisent jamais (le trait orange sur la
+jauge d'eau). Quand le front arrive sur un camion, il se replie s'il le peut. S'il est encerclé, l'équipage s'abrite
+dans la cabine et les rampes d'aspersion arrosent le camion (120 L/min, dôme d'eau bleu) le temps que le front passe ;
+puis il repart faire le plein. Si la réserve s'épuise avant, l'engin est perdu (épave noire, hors service) et
+l'équipage est évacué. Le bilan compte les autoprotections déclenchées et les engins perdus.
+
 ## Évacuations
 
 Chaque site menacé peut être **évacué** (🚗 convois de 300 personnes qui partent toutes les 3 minutes vers une ville

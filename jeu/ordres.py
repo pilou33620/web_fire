@@ -92,7 +92,7 @@ def _postes_en_ligne(p, poste, d, n):
 def planifier(p, ids, ordre, cell=None, cell2=None, d=None):
     """Les missions que recevraient ces moyens (sans les donner). Renvoie (liste de (moyen, mission), refus)."""
     c, g = p.carte, p.carte.g
-    moyens = [m for m in p.moyens if m.id in ids]
+    moyens = [m for m in p.moyens if m.id in ids and not m.hs]
     refus = [u.nom for u in moyens if ordre not in ORDRES_PAR_TYPE[u.kind] and u.kind != 'vlhr']
     moyens = [u for u in moyens if ordre in ORDRES_PAR_TYPE[u.kind]]
     plans = []

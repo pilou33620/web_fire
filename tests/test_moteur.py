@@ -194,6 +194,51 @@ class TestSections(unittest.TestCase):
         self.assertIsNotNone(r['moyens'][0]['ecopage'])
 
 
+class TestAutoprotection(unittest.TestCase):
+    def _encercler(self, eau):
+        from jeu.moyens import RESERVE
+        p = partie_calme()
+        g = p.carte.g
+        i0 = cellule_centrale(p)
+        u = next(m for m in p.moyens if m.kind == 'ccf')
+        u.cell, u.x, u.y, u.eau = i0, g.cx[i0], g.cy[i0], eau
+        u.mission, u.joueur = dict(type='preposition', poste=i0, label='test'), True
+        for j in [i0] + g.voisins(i0):
+            if p.feu.allumer(j, t=0):
+                p.feu.I[j] = 0.95
+        return p, u
+
+    def test_l_autoprotection_sauve_le_camion(self):
+        from jeu.moyens import RESERVE
+        p, u = self._encercler(RESERVE)
+        u.pas(p)
+        self.assertTrue(u.auto)
+        self.assertFalse(u.hs)
+        self.assertEqual(u.eau, RESERVE - 120)
+        self.assertTrue(any('autoprotection' in j['txt'] for j in p.journal))
+
+    def test_sans_reserve_le_camion_est_perdu(self):
+        p, u = self._encercler(0)
+        u.pas(p)
+        self.assertTrue(u.hs)
+        self.assertEqual(p.stats.get('perdus'), 1)
+        self.assertFalse(p.action(dict(type='ordre', moyens=[u.id], ordre='poster', cell=u.base))['ok'])
+
+    def test_les_lances_ne_touchent_pas_la_reserve(self):
+        from jeu.moyens import RESERVE
+        p = partie_calme()
+        g = p.carte.g
+        i0 = cellule_centrale(p)
+        u = next(m for m in p.moyens if m.kind == 'ccf')
+        voisin = g.voisins(i0)[0]
+        u.cell, u.eau = i0, RESERVE + 250
+        p.feu.allumer(voisin, t=0)
+        p.feu.I[voisin] = 0.5
+        for _ in range(3):
+            u._arroser_voisins(p, 0.8)
+        self.assertGreaterEqual(u.eau, RESERVE)
+
+
 class TestEvacuation(unittest.TestCase):
     def test_evacuer_puis_arriver(self):
         p = partie_calme(SANS_MOYENS)

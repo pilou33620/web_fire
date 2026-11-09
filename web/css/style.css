@@ -112,7 +112,9 @@ h3 { font-family: var(--titre); font-weight: 600; font-size: 15px; margin: 16px 
 .moyen b { font-weight: 800; font-size: 13px; }
 .moyen small { color: var(--gris); font-weight: 700; grid-column: 2 / 4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .moyen .eau { width: 54px; height: 8px; border-radius: 4px; border: 1.5px solid var(--bord); background: var(--fond3); overflow: hidden; }
+.moyen .eau { position: relative; }
 .moyen .eau span { display: block; height: 100%; background: var(--eau); }
+.moyen .eau i.res { position: absolute; top: -2px; bottom: -2px; left: 12.5%; width: 2px; background: #ffb02e; }
 .moyen.choisi { border-color: var(--or); }
 .journal { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
 .journal li { display: grid; grid-template-columns: 44px 1fr; gap: 8px; padding: 6px 8px; border-radius: 10px; background: var(--fond2); border: 2px solid var(--bord); font-size: 12.5px; font-weight: 700; line-height: 1.35; }

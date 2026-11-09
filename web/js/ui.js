@@ -43,8 +43,10 @@ export function etatMoyen(d) {
   const a = d.a?.k;
   const A = { arrose: 'arrose le feu', noie: 'noie les lisières', protege: 'protège les maisons', remplit: 'fait le plein d\'eau', va_remplir: 'va remplir sa citerne',
     ecope: d.k === 'canadair' ? 'écope' : 'puise de l\'eau', largue: 'largue !', vol: 'en vol', au_sol: 'au sol', defriche: 'ouvre le pare-feu', attend: 'en position',
-    surveille: 'surveille', patrouille: 'patrouille', mouille: 'mouille devant la ligne', commande: 'commande le groupe', alerte: d.k === 'ccf' || d.k === 'bull' ? 'départ de la caserne' : 'décollage' };
+    surveille: 'surveille', patrouille: 'patrouille', mouille: 'mouille devant la ligne', commande: 'commande le groupe',
+    autoprotection: '🛡 autoprotection : équipage à l\'abri', hs: '⚠ hors service (perdu)', alerte: d.k === 'ccf' || d.k === 'bull' ? 'départ de la caserne' : 'décollage' };
   if (a && A[a]) return A[a];
+  if (d.hs) return '⚠ hors service (perdu)';
   return { dispo: 'disponible', route: 'en route', action: 'en action', ravitaillement: 'ravitaillement', au_sol: 'au sol', retour: 'retour à la base', alerte: 'alerte' }[d.e] || d.e;
 }
 
@@ -92,7 +94,8 @@ export function situation(E, C, sel, mode, raison) {
     <dt>Largages aériens</dt><dd>${st.largages}</dd><dt>Colonnes de renfort</dt><dd>${st.renforts}</dd>
     <dt>Personnes évacuées</dt><dd>${nf(st.personnes.evacues)}</dd><dt>À l'abri sur place</dt><dd>${nf(st.personnes.confines)}</dd>
     <dt>Sur les routes</dt><dd>${nf(st.personnes.route)}</dd><dt>Personnes exposées au feu</dt><dd style="color:${st.personnes.exposes ? 'var(--rouge)' : 'inherit'}">${nf(st.personnes.exposes)}</dd>
-    <dt>Habitations détruites (est.)</dt><dd>${nf(st.maisons)}</dd><dt>Note du commandement</dt><dd style="color:var(--or)">${st.score} / 100</dd></dl>`;
+    <dt>Habitations détruites (est.)</dt><dd>${nf(st.maisons)}</dd>
+    <dt>Autoprotections déclenchées</dt><dd>${st.autoprotections || 0}</dd><dt>Engins perdus</dt><dd style="color:${st.perdus ? 'var(--rouge)' : 'inherit'}">${st.perdus || 0}</dd><dt>Note du commandement</dt><dd style="color:var(--or)">${st.score} / 100</dd></dl>`;
   const touches = E.sites.filter(s => s.etat !== 'sauf');
   h += `<h3>Points sensibles</h3><div class="chips">` + C.sites.filter(s => s.type !== 'reserve').map(s => {
     const e = E.sites[s.id]; const [cls, lib] = SITE_ETAT[e.etat];
@@ -118,8 +121,8 @@ function ficheCellule(E, C, i) {
 export function ficheMoyen(d, C, E) {
   const f = d.f != null ? E.feux.find(x => x.id === d.f) : null;
   return `<div class="carte-feu choisi fiche"><div class="tete"><b>${ICONE[d.k]} ${esc(d.n)}</b><span class="sous">${d.j ? '🧑‍🚒 vos ordres' : '🤖 IA'}${d.r ? ' · renfort' : ''}</span></div>
-    <div class="chips"><span class="chip">${esc(etatMoyen(d))}</span>${d.eau != null ? `<span class="chip">💧 ${d.eau} %</span>` : ''}${d.m ? `<span class="chip">${esc(d.m)}</span>` : ''}</div>
-    <dl class="lignes">${f ? `<dt>Feu</dt><dd>${esc(f.nom)}</dd>` : ''}${d.g ? `<dt>Groupe</dt><dd>${esc(d.g)} <button type="button" class="mini" data-groupe="${esc(d.g)}">choisir le groupe</button></dd>` : ''}<dt>Eau projetée</dt><dd>${nf(d.l / 1000)} m³</dd></dl>
+    <div class="chips"><span class="chip ${d.hs || d.au ? 'chaud' : ''}">${esc(etatMoyen(d))}</span>${d.eau != null ? `<span class="chip">💧 ${d.eau} %</span>` : ''}${d.m ? `<span class="chip">${esc(d.m)}</span>` : ''}</div>
+    <dl class="lignes">${f ? `<dt>Feu</dt><dd>${esc(f.nom)}</dd>` : ''}${d.k === 'ccf' ? `<dt>Réserve d'autoprotection</dt><dd>${d.au ? 'en cours d\'utilisation' : '500 L (intouchable par les lances)'}</dd>` : ''}${d.g ? `<dt>Groupe</dt><dd>${esc(d.g)} <button type="button" class="mini" data-groupe="${esc(d.g)}">choisir le groupe</button></dd>` : ''}<dt>Eau projetée</dt><dd>${nf(d.l / 1000)} m³</dd></dl>
     ${d.k === 'vlhr' ? '<p class="note">Le chef suit son groupe : donnez vos ordres au groupe.</p>' : boutonsOrdres([d.k], [d.id], null)}</div>`;
 }
 export function ficheGroupe(E, ids, arme) {
@@ -147,7 +150,7 @@ export function moyens(E, sel) {
     const eng = l.filter(d => d.m).length;
     const grp = [...new Set(l.map(d => d.g).filter(Boolean))];
     h += `<div class="groupe"><h3>${ICONE[k]} ${NOM_TYPE[k]} · ${eng}/${l.length} engagés</h3>` + (grp.length ? `<div class="chips">${grp.map(g => `<button type="button" class="mini" data-groupe="${esc(g)}">Choisir ${esc(g)}</button>`).join('')}<button type="button" class="mini" data-tous="${k}">Tous</button></div>` : `<div class="chips"><button type="button" class="mini" data-tous="${k}">Choisir tous</button></div>`) + l.map(d => `<div class="moyen ${d.id === sel ? 'choisi' : ''}" data-moyen="${d.id}">
-      <span class="ic">${ICONE[k]}</span><b>${esc(d.n)}${d.j ? ' 🧑‍🚒' : ''}</b>${d.eau != null ? `<span class="eau" title="Eau ${d.eau} %"><span style="width:${d.eau}%"></span></span>` : '<span></span>'}
+      <span class="ic">${ICONE[k]}</span><b>${esc(d.n)}${d.j ? ' 🧑‍🚒' : ''}</b>${d.eau != null ? `<span class="eau" title="Eau ${d.eau} % (le trait marque la réserve d'autoprotection)"><span style="width:${d.eau}%"></span>${k === 'ccf' ? '<i class="res"></i>' : ''}</span>` : '<span></span>'}
       <small>${esc(etatMoyen(d))}${d.m ? ' · ' + esc(d.m) : ''}</small></div>`).join('') + '</div>';
   }
   return h;
