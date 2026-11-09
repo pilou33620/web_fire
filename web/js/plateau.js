@@ -8,6 +8,31 @@ import { dessinerVoies } from './voies.js';
 const BLOC = 10;
 export const R = 10;
 
+// interpolation des engins : à chaque nouvel état, le trajet suivi depuis le précédent (reste de l'ancien trajet, puis
+// points de passage du moteur), parcouru à vitesse régulière au lieu d'une ligne droite qui couperait les virages
+export function trajet(o, d, tPrec, t) {
+  o.x0 = o.xa ?? o.x1; o.y0 = o.ya ?? o.y1; o.cap0 = o.capa ?? o.cap1; o.x1 = d.x; o.y1 = d.y; o.cap1 = d.cap;
+  const p = [[o.x0, o.y0, tPrec], ...(o.pts ? o.pts.slice(o.k ?? o.pts.length) : [])];
+  for (const [tt, x, y] of d.tr || []) if (tt > tPrec) p.push([x, y, tt]);
+  p.push([d.x, d.y, t]);
+  o.pts = p; o.k = 1; o.cum = [0];
+  for (let k = 1; k < p.length; k++) o.cum.push(o.cum[k - 1] + Math.hypot(p[k][0] - p[k - 1][0], p[k][1] - p[k - 1][1]));
+}
+// position et cap à la fraction a du trajet
+export function suivre(o, a) {
+  const p = o.pts, c = o.cum;
+  if (!p) return [o.x1, o.y1, o.cap1];
+  const n = p.length, L = c[n - 1] * a;
+  let k = 1; while (k < n - 1 && c[k] < L) k++;
+  o.k = k;
+  if (n < 2) { o.xa = p[0][0]; o.ya = p[0][1]; return [o.xa, o.ya, o.cap1]; }
+  const A = p[k - 1], B = p[k], l = c[k] - c[k - 1], u = l > 0 ? clamp((L - c[k - 1]) / l, 0, 1) : 1;
+  const dc = ((o.cap1 - o.cap0 + 540) % 360) - 180;
+  const cap = l > 1 ? Math.atan2(B[1] - A[1], B[0] - A[0]) * 180 / Math.PI : o.cap0 + dc * a;
+  o.xa = A[0] + (B[0] - A[0]) * u; o.ya = A[1] + (B[1] - A[1]) * u;
+  return [o.xa, o.ya, cap];
+}
+
 const COUL_ETAT = { b: 0x3b3632, e: 0x4f4439, n: 0x464a4c, x: 0xb8955f };
 
 export class Plateau {
@@ -142,6 +167,24 @@ export class Plateau {
     return true;
   }
 
+  // le point le plus proche sur une voie dessinée : les engins roulent sur la route tracée, pas sur le centre des hexagones
+  surVoie(x, z) {
+    const i = this.cellule(x, z); if (i < 0 || !(+this.C.route[i] >= 1) || !this.bord) return [x, z];
+    let bx = x, bz = z, bd = (R * 0.8) ** 2;
+    for (const j of [i, ...this.voisins(i)]) {
+      const l = j >= 0 && this.bord.get(j); if (!l) continue;
+      for (let k = 0; k < l.length; k += 3) {
+        // segment vers le point suivant de la même voie (points voisins dans la liste), sinon le point seul
+        const ax = l[k], az = l[k + 1], ok = k + 4 < l.length && Math.hypot(l[k + 3] - ax, l[k + 4] - az) < 5;
+        const dx = ok ? l[k + 3] - ax : 0, dz = ok ? l[k + 4] - az : 0, ll = dx * dx + dz * dz;
+        const u = ll > 0 ? clamp(((x - ax) * dx + (z - az) * dz) / ll, 0, 1) : 0, px = ax + dx * u, pz = az + dz * u;
+        const d = (px - x) ** 2 + (pz - z) ** 2;
+        if (d < bd) { bd = d; bx = px; bz = pz; }
+      }
+    }
+    return [bx, bz];
+  }
+
   // ------------------------------------------------------------------ eau, routes, installations
   _eau() {
     const C = this.C;
@@ -171,7 +214,7 @@ export class Plateau {
     const route = (x, z) => { const i = this.cellule(x, z); return i >= 0 && [i, ...this.voisins(i)].some(j => j >= 0 && +C.route[j] >= 2); };
     this.bord = new Map();          // cellule -> points des voies (pour ne rien construire dessus)
     const marquer = (x, z, w) => { const i = this.cellule(x, z); if (i < 0) return; let l = this.bord.get(i); if (!l) this.bord.set(i, l = []); l.push(x, z, w); };
-    dessinerVoies(voies, { s: 1, deco: 1.6, sol, site, pont, route, marquer }, L, D);
+    dessinerVoies(voies, { s: 1, deco: 1.6, sol, site, pont, route, marquer, joint: C.hexM * this.S }, L, D);
     this.routes = fige(L, this.groupe, { ombre: false, contour: false }); this.panneaux = fige(D, this.groupe);
     // la rivière : un ruban d'eau vive
     if (C.riviere?.length > 1) {
@@ -355,7 +398,9 @@ export class Plateau {
 }
 
 // ------------------------------------------------------------------ les moyens de lutte sur la carte
+const TERRE = new Set(['ccf', 'bull', 'vlhr', 'fpt', 'vpc', 'debr', 'ravit', 'vsav']);
 export class Flotte {
+  duree = 1000;
   constructor(plateau, s = 1) {
     this.P = plateau; this.s = s; this.u = new Map(); this.grp = new THREE.Group(); plateau.scene.add(this.grp);
     // une géométrie par type de moyen, partagée
@@ -379,22 +424,24 @@ export class Flotte {
     if (d.k === 'dragon') { o.rotor = cloner(this.geo.rotor); o.rotor.position.y = this.rotorY * 0.9; o.corps.add(o.rotor); }
     if (d.k === 'helico') { o.rotor = cloner(this.geo.rotor); o.rotor.position.y = this.rotorY; o.corps.add(o.rotor); o.seau = cloner(this.geo.seau); o.corps.add(o.seau); }
     if (d.k === 'ccf') { o.gyro = new THREE.Mesh(this.gyroGeo, this.gyro.clone()); o.gyro.position.set(1.15 * this.s, 1.65 * this.s, 0); o.corps.add(o.gyro); }
-    if (!['ccf', 'bull', 'vlhr', 'fpt', 'vpc', 'debr', 'ravit', 'vsav'].includes(d.k)) { o.ombre = new THREE.Mesh(this.ombreGeo, this.ombreMat); o.ombre.scale.setScalar(d.k === 'helico' ? 2.2 * this.s : 3.4 * this.s); this.grp.add(o.ombre); }
+    if (!TERRE.has(d.k)) { o.ombre = new THREE.Mesh(this.ombreGeo, this.ombreMat); o.ombre.scale.setScalar(d.k === 'helico' ? 2.2 * this.s : 3.4 * this.s); this.grp.add(o.ombre); }
     o.grp.scale.setScalar(1);
     this.grp.add(o.grp);
     return o;
   }
   // nouvel état : on garde la position d'avant pour glisser jusqu'à la nouvelle
-  maj(liste, now) {
-    const vus = new Set();
+  // t : minute de jeu de l'état ; tant qu'elle ne change pas, on laisse l'interpolation en cours se finir
+  maj(liste, now, t) {
+    const vus = new Set(), neuf = t !== this.t, tPrec = this.t ?? t;
+    this.t = t;
     for (const d of liste) {
       vus.add(d.id);
       let o = this.u.get(d.id);
-      if (!o) { o = this._creer(d); this.u.set(d.id, o); o.x0 = o.x1 = d.x; o.y0 = o.y1 = d.y; o.cap0 = o.cap1 = d.cap; }
-      else { o.x0 = o.xa ?? o.x1; o.y0 = o.ya ?? o.y1; o.cap0 = o.capa ?? o.cap1; o.x1 = d.x; o.y1 = d.y; o.cap1 = d.cap; }
-      o.t0 = now; o.d = d;
+      if (!o) { o = this._creer(d); this.u.set(d.id, o); o.x0 = o.x1 = d.x; o.y0 = o.y1 = d.y; o.cap0 = o.cap1 = d.cap; o.t0 = now; }
+      else if (neuf) { this._lacher(o); suivre(o, clamp((now - o.t0) / this.duree, 0, 1)); trajet(o, d, tPrec, t); o.t0 = now; }
+      o.d = d;
     }
-    for (const [id, o] of this.u) if (!vus.has(id)) { this.grp.remove(o.grp); o.ombre && this.grp.remove(o.ombre); o.bulle && this.grp.remove(o.bulle); this.u.delete(id); }
+    for (const [id, o] of this.u) if (!vus.has(id)) { this._lacher(o); this.grp.remove(o.grp); o.ombre && this.grp.remove(o.ombre); o.bulle && this.grp.remove(o.bulle); this.u.delete(id); }
     // les engins garés au même endroit (caserne, aérodrome) se rangent côte à côte au lieu de se superposer
     const parc = new Map();
     for (const o of this.u.values()) {
@@ -406,16 +453,31 @@ export class Flotte {
       o.place = [((n % 4) - 1.5) * pas, (Math.floor(n / 4) - 0.5) * pas];
     }
   }
-  // position 3D d'un moyen à l'instant présent (interpolée)
+  // un effet (largage) attend que le moyen arrive, à l'écran, au point du trajet où il a eu lieu (minute tEv)
+  differer(id, tEv, fn) {
+    const o = this.u.get(id);
+    if (!o?.pts) return fn();
+    let k = 0; o.pts.forEach((p, i) => { if (p[2] <= tEv) k = i; });
+    (o.attente ||= []).push({ s: o.cum[k], fn });
+  }
+  _lacher(o) { for (const w of o.attente || []) w.fn(); o.attente = []; }
+  // position 3D d'un moyen à l'instant présent (interpolée le long du trajet)
   anime(dt, t, now, duree, plateau, jets) {
     const P = this.P;
+    this.duree = duree;
     for (const o of this.u.values()) {
       const d = o.d, a = clamp((now - o.t0) / duree, 0, 1);
-      const mx = o.x0 + (o.x1 - o.x0) * a, my = o.y0 + (o.y1 - o.y0) * a;
-      let dc = ((o.cap1 - o.cap0 + 540) % 360) - 180; const cap = o.cap0 + dc * a;
+      const [mx, my, cap] = suivre(o, a);
       o.xa = mx; o.ya = my; o.capa = cap;
+      if (o.attente?.length) {
+        const L = o.cum[o.cum.length - 1] * a + 0.01;
+        o.attente = o.attente.filter(w => w.s <= L ? (w.fn(), false) : true);
+      }
       let [x, z] = P.vers3D(mx, my);
       if (o.place) { x += o.place[0]; z += o.place[1]; }
+      else if (TERRE.has(d.k) && !d.hs) [x, z] = P.surVoie(x, z);
+      if (o.capV === undefined) o.capV = cap;
+      o.capV += (((cap - o.capV + 540) % 360) - 180) * Math.min(1, dt * 8);
       const i = P.cellule(x, z), sol = i >= 0 ? Math.max(P.top[i], -0.9) : 0;
       let y = sol, inc = 0;
       const act = d.a?.k;
@@ -426,7 +488,7 @@ export class Flotte {
       if (o.y3 === undefined) o.y3 = y;
       o.y3 += (y - o.y3) * Math.min(1, dt * 2.5);
       o.grp.position.set(x, o.y3, z);
-      o.grp.rotation.y = -cap * Math.PI / 180;
+      o.grp.rotation.y = -o.capV * Math.PI / 180;
       if (o.ombre) { o.ombre.position.set(x, sol + 0.2, z); o.ombre.visible = o.y3 > sol + 1.5; }
       if (o.rotor) { o.rotor.rotation.y += dt * (o.y3 > sol + 1.5 ? 28 : 4); if (o.seau) o.seau.visible = o.y3 > sol + 3 && !!d.m; }
       if (d.k === 'canadair' || d.k === 'dash') o.corps.rotation.z = o.y3 > sol + 2 ? 0.05 : 0;
@@ -477,8 +539,9 @@ export class Convois {
     });
     this.feux = new THREE.MeshBasicMaterial({ color: 0xffa020 });
   }
-  maj(liste, now) {
-    const vus = new Set();
+  maj(liste, now, t) {
+    const vus = new Set(), neuf = t !== this.t;
+    this.t = t;
     for (const d of liste) {
       vus.add(d.id);
       let o = this.u.get(d.id);
@@ -491,9 +554,9 @@ export class Convois {
           c.position.x = -k * 2.3 * this.s; o.grp.add(c); o.cars.push(c);
         }
         o.alerte = new THREE.Mesh(new THREE.SphereGeometry(0.5 * this.s, 6, 4), this.feux); o.alerte.position.y = 2.2 * this.s; o.grp.add(o.alerte);
-        this.grp.add(o.grp); this.u.set(d.id, o); o.x0 = o.x1 = d.x; o.y0 = o.y1 = d.y; o.cap0 = o.cap1 = d.cap;
-      } else { o.x0 = o.xa ?? o.x1; o.y0 = o.ya ?? o.y1; o.cap0 = o.capa ?? o.cap1; o.x1 = d.x; o.y1 = d.y; o.cap1 = d.cap; }
-      o.t0 = now; o.d = d;
+        this.grp.add(o.grp); this.u.set(d.id, o); o.x0 = o.x1 = d.x; o.y0 = o.y1 = d.y; o.cap0 = o.cap1 = d.cap; o.t0 = now;
+      } else if (neuf) { o.x0 = o.xa ?? o.x1; o.y0 = o.ya ?? o.y1; o.cap0 = o.capa ?? o.cap1; o.x1 = d.x; o.y1 = d.y; o.cap1 = d.cap; o.t0 = now; }
+      o.d = d;
     }
     for (const [id, o] of this.u) if (!vus.has(id)) { this.grp.remove(o.grp); this.u.delete(id); }
   }

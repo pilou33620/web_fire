@@ -107,6 +107,7 @@ class Moyen:
         self.hs = False                   # hors service (engin perdu dans le feu)
         self.groupe = None
         self.auto = False                 # autoprotection en cours
+        self.trace = []                   # [minute (heure de jeu), x, y] des derniers points de passage, pour que l'interface suive le trajet
 
     # ------------------------------------------------------------------ déplacement au sol
     def aller(self, p, dest):
@@ -176,6 +177,7 @@ class Moyen:
             if reste <= budget:
                 budget -= reste
                 self.cell = j
+                self.trace.append([p.meteo.t, round(g.cx[j]), round(g.cy[j])])
                 self.chemin.pop(0)
                 self.avance = 0.0
             else:
@@ -238,6 +240,9 @@ class Moyen:
             self._pas_sol(p)
         else:
             self._pas_air(p)
+        if not self.trace or self.trace[-1][1:] != [round(self.x), round(self.y)]:
+            self.trace.append([p.meteo.t, round(self.x), round(self.y)])
+        del self.trace[:-24]
 
     def _fin_attente(self, p):
         if self.etat == 'ravitaillement':
@@ -800,4 +805,4 @@ class Moyen:
                     ca=round(100 * self.carb / self.carb_max) if self.carb_max else None,
                     ch=sum(x['n'] for x in self.charge) if self.charge else 0,
                     dir=m.get('dir') if m else None, ax=m.get('axe') if m else None, ci=m.get('cible') if m else None,
-                    g=getattr(self, 'groupe', None))
+                    g=getattr(self, 'groupe', None), tr=self.trace[-16:])
