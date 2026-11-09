@@ -337,7 +337,7 @@ class Commandement:
             if sid not in f['menace_log']:
                 f['menace_log'].add(sid)
                 p.journal_ajout('alerte', f"{s['nom']} menacé : arrivée du feu estimée dans {eta} min.")
-            self._population(s, eta)
+            self._population(s, eta, f)
             besoin = {'ville': 4, 'village': 2, 'camping': 3, 'usine': 3, 'patrimoine': 1}.get(s['type'], 2)
             if eta < 60:
                 besoin += 1
@@ -425,10 +425,13 @@ class Commandement:
             txt += ' (moyens aériens au sol : ' + ('nuit' if met.nuit else 'vent trop fort') + ')'
         self._strategie(f, txt)
 
-    def _population(self, s, eta):
-        """Évacuer tant qu'il est temps de partir par la route ; sinon, confiner (mise à l'abri sur place)."""
+    def _population(self, s, eta, f):
+        """Évacuer tant qu'il est temps de partir par la route ; sinon, confiner (mise à l'abri sur place).
+        On n'évacue pas pour un feu naissant (l'attaque massive doit suffire) ; une ville ne s'évacue qu'en dernier recours."""
         ev = self.p.evac.sites.get(s['id'])
-        if not ev or ev['statut'] != 'normal' or s['type'] not in ('ville', 'village', 'camping', 'usine') or eta > 150:
+        if not ev or ev['statut'] != 'normal' or s['type'] not in ('ville', 'village', 'camping', 'usine'):
+            return
+        if f['statut'] == 'naissant' or eta > (100 if s['type'] == 'ville' else 150):
             return
         if self.p.evac.temps_evacuation(s['id']) + 15 < eta:
             self.p.evac.evacuer(s['id'])

@@ -348,7 +348,8 @@ camera.onHover = (cx, cy) => {
   if (!o) {
     const s = C.sites.find(s => s.cells.includes(i)), e = E?.etat[i];
     bulle.hidden = false;
-    bulle.innerHTML = `<b>${UI.esc(s ? s.nom : C.comb[C.fuel[i]].nom)}</b><br>${e === 'f' ? '🔥 en feu' : e === 'b' ? 'brûlé' : e === 'e' || e === 'n' ? 'éteint' : C.comb[C.fuel[i]].nom}`;
+    const v = C.voies?.[C.route[i]];
+    bulle.innerHTML = `<b>${UI.esc(s ? s.nom : C.comb[C.fuel[i]].nom)}</b><br>${e === 'f' ? '🔥 en feu' : e === 'b' ? 'brûlé' : e === 'e' || e === 'n' ? 'éteint' : C.comb[C.fuel[i]].nom}${v ? `<br>${C.route[i] === '1' ? '🟫' : '🛣'} ${UI.esc(v.nom)} : ＋ ${UI.esc(v.bonus[0].toLowerCase())} · － ${UI.esc(v.malus[0].toLowerCase())}` : ''}`;
   }
   bulle.style.left = cx + 14 + 'px'; bulle.style.top = cy + 14 + 'px';
   camera.sale = true;
@@ -445,4 +446,5 @@ function boucle() {
 }
 
 demarrer().catch(err => { console.error(err); progres('Erreur : ' + err.message); });
-window.__feux = { get E() { return E; }, get C() { return C; }, get P() { return P; }, camera, get L() { return L; }, entrerIntervention, quitterIntervention, get inter() { return inter; } };
+window.__feux = { get E() { return E; }, get C() { return C; }, get P() { return P; }, camera, get L() { return L; }, entrerIntervention, quitterIntervention, get inter() { return inter; },
+  choisirCellule(i) { sel.cell = i; sel.moyen = null; sel.groupe = null; montrerSituation(); } };

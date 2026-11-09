@@ -47,6 +47,17 @@ Canadair…), puis un ordre, puis l'endroit sur la carte :
 📍 se poster · 🔥 attaquer · 🛡 défendre un site · 👁 surveiller les lisières · 💧 larguer · 🟥 ligne de retardant ·
 🚧 pare-feu (deux points) · ↩ retour à la base · 🤖 rendre à l'IA.
 
+## Routes et pistes : bonus et malus
+
+| | Bonus | Malus |
+|---|---|---|
+| **Routes** (enrobé, ligne blanche, panneaux d'entrée de village, garde-corps sur les ponts) | camions rapides (50-60 km/h) ; large coupure, le feu passe mal ; seules voies des convois d'évacuation | bouchons quand les convois roulent ; la fumée ralentit ; plus de départs de feu le long des routes ; elles contournent le massif |
+| **Pistes DFCI** (sable, deux ornières, barrière rouge et blanche à la jonction avec la route, poteau indicateur au bout) | pénètrent le massif jusqu'au feu, postes d'attaque privilégiés ; citernes aux croisements ; coupure ; bulldozer plus rapide | sable : camions lents (27 km/h) ; étroites : au-delà de 2 engins on n'avance plus qu'au pas ; fermées quand elles longent un feu intense ; interdites aux convois de civils |
+
+Dans les Landes, les pistes forment le quadrillage DFCI ; en Méditerranée, elles suivent les crêtes et descendent
+vers les routes. Le tracé est nettoyé à la génération : routes qui tournent peu, sans escaliers ni doublons, rien de
+construit ni de planté sur l'emprise des voies.
+
 ## Évacuations
 
 Chaque site menacé peut être **évacué** (🚗 convois de 300 personnes qui partent toutes les 3 minutes vers une ville
@@ -92,5 +103,6 @@ Trois doctrines au choix (équilibrée, offensive, défensive). `python outils/b
 | `jeu/ordres.py`, `jeu/evacuation.py` | vos ordres de COS ; évacuations, fumée, routes coupées |
 | `web/js/plateau.js`, `web/js/modeles.js`, `web/js/moteur.js` | le plateau 3D, les modèles, le moteur de rendu (repris de web_conquete) |
 | `web/js/intervention.js` | le mode Intervention |
+| `web/js/voies.js` | le dessin des routes et des pistes (commun aux deux vues) |
 | `web/js/liaison.js`, `web/js/pyworker.js` | la liaison avec le serveur, ou Pyodide dans le navigateur |
 | `tests/` | `python -m unittest discover -s tests` |

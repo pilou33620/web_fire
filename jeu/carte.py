@@ -8,8 +8,10 @@ import math
 import random
 
 from .bruit import fbm, hache
-from .combustibles import COMB, EAU
-from .hexa import Grille, astar
+from .combustibles import COMB, EAU, VOIES
+import math as _m
+
+from .hexa import Grille, astar, astar_virages, simplifier
 
 NOMS = {
     'landes': {
@@ -62,6 +64,7 @@ class Carte:
         else:
             self._landes()
         self._plans_eau()
+        self._finaliser_routes()
 
     # ------------------------------------------------------------------ outils
     def x(self, i):
@@ -323,16 +326,29 @@ class Carte:
                 if a['id'] < b['id'] and (a, b) not in aretes and 10 < g.distance(a['centre'], b['centre']) < 20 and self.rnd.random() < 0.3:
                     aretes.append((a, b))
         for a, b in aretes:
-            ch, _ = astar(g, a['centre'], b['centre'], cout, 0.3)
+            ch, _ = astar_virages(g, a['centre'], b['centre'], cout, 0.3)
             if not ch:
                 continue
             niveau = 3 if 'ville' in (a['type'], b['type']) else 2
             for i in ch:
                 self.route[i] = max(self.route[i], niveau)
             self.routes_poly.append(dict(n=niveau, c=ch))
-        # sorties de carte : la ville est reliée au bord est (et à l'aérodrome plus tard)
+        # chemins d'accès aux sites isolés (patrimoine, réserve) : une petite route vers la route la plus proche
+        for s in self.sites:
+            if s['type'] in ('patrimoine', 'reserve') and not any(self.route[i] for i in s['cells']):
+                cible = [i for i in range(g.n) if self.route[i] >= 2]
+                if cible:
+                    but = min(cible, key=lambda i: g.distance(i, s['centre']))
+                    ch, _ = astar_virages(g, s['centre'], but, cout, 0.3)
+                    if ch and len(ch) < 14:
+                        for i in ch:
+                            self.route[i] = max(self.route[i], 2)
+                        self.routes_poly.append(dict(n=2, c=ch))
         if pistes:
-            self._pistes_dfci()
+            if self.theme == 'mediterranee':
+                self._pistes_cretes()
+            else:
+                self._pistes_dfci()
 
     def _pistes_dfci(self):
         """Pistes DFCI : un quadrillage dans les massifs, qui sert de coupure et d'accès aux camions."""
@@ -366,6 +382,38 @@ class Carte:
             if len(run) > 3:
                 self._poser_piste(run)
 
+    def _pistes_cretes(self):
+        """En Méditerranée, les pistes DFCI suivent les crêtes et relient les massifs aux routes (pas de quadrillage)."""
+        g = self.g
+        foret = set('PJFQGK')
+        cells = [i for i in range(g.n) if self.fuel[i] in foret and self.site_de[i] < 0]
+        if not cells:
+            return
+        # points hauts bien répartis : les sommets des massifs
+        sommets = []
+        for i in sorted(cells, key=lambda i: -self.alt[i]):
+            if all(g.distance(i, k) >= 8 for k in sommets):
+                sommets.append(i)
+            if len(sommets) >= 9:
+                break
+
+        def cout(i, j):
+            if self.fuel[j] in 'MLR' or (self.site_de[j] >= 0):
+                return None
+            pente = abs(self.alt[j] - self.alt[i]) / 30.0
+            return 1.0 + pente * pente + (0.2 if self.route[j] == 1 else 0) - min(0.5, self.alt[j] / 1500)
+        routes = [i for i in range(g.n) if self.route[i] >= 2]
+        faits = []
+        for a in sommets:
+            # chaque sommet est relié au sommet voisin le plus proche, et à la route la plus proche
+            voisins = sorted([b for b in sommets if b != a and (b, a) not in faits], key=lambda b: g.distance(a, b))[:1]
+            buts = voisins + ([min(routes, key=lambda r: g.distance(r, a))] if routes else [])
+            for b in buts:
+                ch, _ = astar_virages(g, a, b, cout, 0.6, 0.25, 1.5)
+                if ch and len(ch) > 3:
+                    faits.append((a, b))
+                    self._poser_piste([i for i in ch if self.route[i] < 2] and ch)
+
     def _poser_piste(self, run):
         for i in run:
             if self.route[i] == 0:
@@ -390,7 +438,7 @@ class Carte:
             for j in g.anneau(a, 1):
                 if self.site_de[j] < 0 and self.fuel[j] not in EAU:
                     self.fuel[j] = 'A'
-            ch, _ = astar(g, a, ref, lambda i, j: None if self.fuel[j] in 'ML' else (0.3 if self.route[j] >= 2 else 1.0), 0.3)
+            ch, _ = astar_virages(g, a, ref, lambda i, j: None if self.fuel[j] in 'ML' else (0.3 if self.route[j] >= 2 else 1.0), 0.3)
             if ch:
                 for i in ch:
                     self.route[i] = max(self.route[i], 2)
@@ -424,6 +472,41 @@ class Carte:
                 self.points_eau.append(i)
         if self.helistation is not None:
             self.points_eau.append(self.helistation)
+
+    def _finaliser_routes(self):
+        """Nettoie le réseau pour le dessin : chaque tronçon n'est tracé qu'une fois (au niveau le plus élevé), puis
+        les escaliers de cellules deviennent des lignes droites et des courbes (sans couper par l'eau)."""
+        g = self.g
+        faits = set()
+        propres = []
+        for r in sorted(self.routes_poly, key=lambda r: -r['n']):
+            run = []
+            for a, b in zip(r['c'], r['c'][1:]):
+                e = (min(a, b), max(a, b))
+                if e in faits or (r['n'] == 1 and self.route[a] >= 2 and self.route[b] >= 2):
+                    if len(run) > 1:
+                        propres.append(dict(n=r['n'], c=run))
+                    run = []
+                    continue
+                faits.add(e)
+                if not run:
+                    run = [a]
+                run.append(b)
+            if len(run) > 1:
+                propres.append(dict(n=r['n'], c=run))
+
+        def valide(a, b):
+            n = max(2, int(_m.hypot(b[0] - a[0], b[1] - a[1]) / (g.hex_m / 3)))
+            for k in range(1, n):
+                i = g.sous(a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n)
+                if i is None or self.fuel[i] in 'ML' or (self.fuel[i] == 'R' and not self.route[i]):
+                    return False
+            return True
+        for r in propres:
+            pts = [(g.cx[i], g.cy[i]) for i in r['c']]
+            tol = g.hex_m * (0.42 if r['n'] == 1 else 0.36)
+            r['p'] = [[round(x), round(y)] for x, y in simplifier(pts, tol, valide)]
+        self.routes_poly = propres
 
     def _plans_eau(self):
         """Repère les plans d'eau (pour l'écopage des Canadair : il en faut un grand)."""
@@ -472,4 +555,5 @@ class Carte:
             lacs=[dict(id=cid, nom=self.corps_nom[cid], taille=n) for cid, n in enumerate(self.corps_taille)],
             corps=self.corps,
             comb={k: dict(nom=v['nom'], brule=v['brule'], col=v['col']) for k, v in COMB.items()},
+            voies={str(k): v for k, v in VOIES.items()},
         )

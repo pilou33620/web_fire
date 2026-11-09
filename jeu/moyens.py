@@ -90,7 +90,11 @@ class Moyen:
                     return None
             if etat[j] == BRULE and j != dest:
                 return None
-            return 1.0 / v + (2.5 if j in danger else 0.0)
+            if j in danger and j != dest:
+                if c.route[j] == 1:
+                    return None             # malus des pistes : on ne s'engage pas sur une piste qui longe un feu intense
+                return 1.0 / v + 2.5
+            return 1.0 / v
 
         ch, _ = astar(c.g, self.cell, dest, cout, 0.42)
         if not ch:
@@ -98,6 +102,17 @@ class Moyen:
         self.chemin = ch[1:]
         self.avance = 0.0
         return True
+
+    def facteur_voie(self, p, j):
+        """Les malus de la voie empruntée : bouchons et fumée sur les routes, pistes trop étroites pour se croiser."""
+        r = p.carte.route[j]
+        if r >= 2:
+            f = 1.0 / (1 + 0.6 * p.trafic_convois.get(j, 0))
+            return f * max(0.45, 1 - 0.6 * p.evac.fumee.get(j, 0))
+        if r == 1:
+            autres = p.trafic_engins.get(j, 0) - (1 if self.cell == j else 0)
+            return 0.35 if autres >= 2 else 1.0
+        return 1.0
 
     def avancer_sol(self, p):
         c, feu, g = p.carte, p.feu, p.carte.g
@@ -109,7 +124,7 @@ class Moyen:
                 if not self.aller(p, dest):
                     self.chemin = []
                 return
-            v = vitesse_sol(self.kind, c, feu, j) or 2.0
+            v = (vitesse_sol(self.kind, c, feu, j) or 2.0) * self.facteur_voie(p, j)
             reste = (1 - self.avance) / v
             if reste <= budget:
                 budget -= reste

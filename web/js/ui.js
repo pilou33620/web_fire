@@ -101,7 +101,8 @@ function ficheCellule(E, C, i) {
   const s = C.sites.find(s => s.cells.includes(i));
   return `<div class="carte-feu choisi"><div class="tete"><b>${esc(s ? s.nom : C.comb[f].nom)}</b><span class="sous">${C.alt[i]} m</span></div>
     <div class="chips"><span class="chip">${esc(C.comb[f].nom)}</span><span class="chip ${e === 'f' ? 'chaud' : ''}">${ETAT[e]}</span>${ret ? '<span class="chip chaud">Retardant</span>' : ''}${mou ? `<span class="chip">Mouillé ${mou[1]} %</span>` : ''}${C.route[i] !== '0' ? `<span class="chip">${['', 'Piste DFCI', 'Route', 'Route principale'][+C.route[i]]}</span>` : ''}</div>
-    ${feu ? `<dl class="lignes"><dt>Intensité</dt><dd>${feu[1]} %</dd><dt>Combustible consumé</dt><dd>${feu[2]} %</dd></dl>` : ''}</div>`;
+    ${feu ? `<dl class="lignes"><dt>Intensité</dt><dd>${feu[1]} %</dd><dt>Combustible consumé</dt><dd>${feu[2]} %</dd></dl>` : ''}
+    ${C.route[i] !== '0' && C.voies ? bonusMalus(C.voies[C.route[i]]) : ''}</div>`;
 }
 
 export function ficheMoyen(d, C, E) {
@@ -117,6 +118,11 @@ export function ficheGroupe(E, ids) {
   return `<div class="carte-feu choisi fiche"><div class="tete"><b>${esc(l[0].g || 'Groupe')} · ${l.length} engins</b><button type="button" class="mini" data-deselect>✕</button></div>
     <ul>${l.map(d => `<li><span>${ICONE[d.k]} ${esc(d.n)}</span><span>${esc(etatMoyen(d))}${d.j ? ' · vos ordres' : ''}</span></li>`).join('')}</ul>
     ${boutonsOrdres([...new Set(l.map(d => d.k))], l.map(d => d.id))}</div>`;
+}
+
+export function bonusMalus(v) {
+  if (!v) return '';
+  return `<div class="bm"><b>${esc(v.nom)}</b><ul>${v.bonus.map(t => `<li class="plus">＋ ${esc(t)}</li>`).join('')}${v.malus.map(t => `<li class="moins">－ ${esc(t)}</li>`).join('')}</ul></div>`;
 }
 
 export function moyens(E, sel) {
@@ -159,6 +165,7 @@ export function partie(infos, R, doctrine, mode) {
       <label>Force du vent (km/h) <span class="curseur"><input type="range" min="0" max="100" step="5" id="vent-f"><output id="vent-f-o">–</output></span></label>
       <div style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="btn" id="b-vent">Appliquer le vent</button><button type="button" class="btn feu" id="b-orage">⚡ Orage sec</button><button type="button" class="btn" id="b-avancer">⏩ +30 min</button></div>
     </div>
+    <h3>Routes et pistes : bonus et malus</h3>${['3', '2', '1'].map(k => bonusMalus(window.__feux?.C?.voies?.[k])).join('')}
     <h3>Légende</h3><div class="legende">
       <span><i style="background:#4f8a3a"></i>Pinède</span><span><i style="background:#9da35a"></i>Lande</span><span><i style="background:#5d9b3a"></i>Feuillus</span><span><i style="background:#d9c25a"></i>Cultures</span>
       <span><i style="background:#3b3632"></i>Brûlé</span><span><i style="background:#4f4439"></i>Éteint</span><span><i style="background:#e0403a"></i>Retardant</span><span><i style="background:#2f7fd8"></i>Mouillé</span>

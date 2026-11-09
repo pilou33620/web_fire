@@ -3,6 +3,7 @@
 // Le sol est découpé en blocs de 10 × 10 hexagones, reconstruits quand l'état d'un de leurs hexagones change.
 import { THREE, SQ3, MAT, CONT, DEGRADE, put, lot, fige, jeter, cyl, boite, sphere, cone, ruban, semer, rnd, entre, hache, clamp, toon } from './moteur.js';
 import * as M from './modeles.js';
+import { dessinerVoies } from './voies.js';
 
 const BLOC = 10;
 export const R = 10;
@@ -91,7 +92,7 @@ export class Plateau {
       const s = this.site[i];
       if (s >= 0) this._bati(D, i, C.sites[s], e);
       else if (f === 'X') { /* sol nu */ }
-      else if (e !== 'b' || 'PFJQ'.includes(f)) M.vegetation(D, f === 'B' || f === 'U' || f === 'Z' || f === 'T' ? 'H' : f, e, this.X[i], y, this.Z[i], R, 1, e === 'b' ? 0.6 : 1);
+      else if (e !== 'b' || 'PFJQ'.includes(f)) M.vegetation(D, f === 'B' || f === 'U' || f === 'Z' || f === 'T' ? 'H' : f, e, this.X[i], y, this.Z[i], R, 1, e === 'b' ? 0.6 : 1, (a, b, r) => this.libre(a, b, r));
     }
     const sol = fige(L, grp, { contour: false });
     sol.children[0].castShadow = false;
@@ -101,29 +102,44 @@ export class Plateau {
 
   _bati(D, i, s, e) {
     const C = this.C, x = this.X[i], z = this.Z[i], y = this.top[i];
-    const pos = (r = 0.62) => { const a = rnd() * 6.28, l = Math.sqrt(rnd()) * R * r; return [x + Math.cos(a) * l, z + Math.sin(a) * l]; };
+    const pos = (r = 0.62) => {
+      for (let k = 0; k < 10; k++) { const a = rnd() * 6.28, l = Math.sqrt(rnd()) * R * r, p = [x + Math.cos(a) * l, z + Math.sin(a) * l]; if (this.libre(p[0], p[1], 1.9)) return p; }
+      return null;
+    };
     const etat = e === 'b' ? 'b' : '.';
+    const D0 = D; D = lot();
     const landes = C.theme === 'landes';
     if (s.type === 'ville') {
-      if (i === s.centre) M.eglise(D, x, y, z, 0.3, 1.1);
+      if (i === s.centre) { const c = pos(0.5); if (c) M.eglise(D, c[0], y, c[1], 0.3, 1.1); }
       const nb = i === s.centre ? 5 : 7;
-      for (let k = 0; k < nb; k++) { const [a, b] = pos(0.7); (rnd() < 0.5 ? M.immeuble : M.maison)(D, a, y, b, rnd() * 3, 0.95, etat); }
-      for (let k = 0; k < 2; k++) { const [a, b] = pos(0.75); M.feuillu(D, a, y, b, 0.6, e === 'b' ? 'b' : '.'); }
+      for (let k = 0; k < nb; k++) { const q = pos(0.7); if (!q) continue; const [a, b] = q; (rnd() < 0.5 ? M.immeuble : M.maison)(D, a, y, b, rnd() * 3, 0.95, etat); }
+      for (let k = 0; k < 2; k++) { const q = pos(0.75); if (!q) continue; const [a, b] = q; M.feuillu(D, a, y, b, 0.6, e === 'b' ? 'b' : '.'); }
     } else if (s.type === 'village' || s.type === 'patrimoine') {
-      if (s.type === 'patrimoine') { M.chapelle(D, x, y, z, 1); for (let k = 0; k < 3; k++) { const [a, b] = pos(); M.feuillu(D, a, y, b, 0.8, etat); } return; }
-      if (i === s.centre) M.eglise(D, x + 2, y, z - 1, rnd() * 3, 0.8);
-      for (let k = 0; k < 4; k++) { const [a, b] = pos(0.7); (landes ? M.maisonLandaise : M.maison)(D, a, y, b, rnd() * 3, 0.9, etat); }
-      for (let k = 0; k < 3; k++) { const [a, b] = pos(0.75); (landes ? M.feuillu : M.olivier)(D, a, y, b, 0.7, etat); }
+      if (s.type === 'patrimoine') { const c = pos(0.45) || [x, z]; M.chapelle(D, c[0], y, c[1], 1); for (let k = 0; k < 3; k++) { const q = pos(); if (!q) continue; const [a, b] = q; M.feuillu(D, a, y, b, 0.8, etat); } for (const k of ['g', 'o']) for (const geo of D[k]) D0[k].push(geo); return; }
+      if (i === s.centre) { const c = pos(0.5); if (c) M.eglise(D, c[0], y, c[1], rnd() * 3, 0.8); }
+      for (let k = 0; k < 4; k++) { const q = pos(0.7); if (!q) continue; const [a, b] = q; (landes ? M.maisonLandaise : M.maison)(D, a, y, b, rnd() * 3, 0.9, etat); }
+      for (let k = 0; k < 3; k++) { const q = pos(0.75); if (!q) continue; const [a, b] = q; (landes ? M.feuillu : M.olivier)(D, a, y, b, 0.7, etat); }
     } else if (s.type === 'camping') {
-      for (let k = 0; k < 4; k++) { const [a, b] = pos(0.75); (landes ? M.pin : M.sapinPin)(D, a, y, b, 0.85, e); }
-      for (let k = 0; k < 5; k++) { const [a, b] = pos(0.6); M.tente(D, a, y, b, rnd() * 3, 1, etat); }
-      for (let k = 0; k < 3; k++) { const [a, b] = pos(0.6); M.mobilhome(D, a, y, b, rnd() * 3, 1, etat); }
+      for (let k = 0; k < 4; k++) { const q = pos(0.75); if (!q) continue; const [a, b] = q; (landes ? M.pin : M.sapinPin)(D, a, y, b, 0.85, e); }
+      for (let k = 0; k < 5; k++) { const q = pos(0.6); if (!q) continue; const [a, b] = q; M.tente(D, a, y, b, rnd() * 3, 1, etat); }
+      for (let k = 0; k < 3; k++) { const q = pos(0.6); if (!q) continue; const [a, b] = q; M.mobilhome(D, a, y, b, rnd() * 3, 1, etat); }
     } else if (s.type === 'usine') {
-      if (i === s.centre) M.usine(D, x, y, z, 1, etat);
-      else for (let k = 0; k < 2; k++) { const [a, b] = pos(0.5); M.maison(D, a, y, b, rnd() * 3, 1.2, etat); }
+      if (i === s.centre) { const c = pos(0.3) || [x, z]; M.usine(D, c[0], y, c[1], 1, etat); }
+      else for (let k = 0; k < 2; k++) { const q = pos(0.5); if (!q) continue; const [a, b] = q; M.maison(D, a, y, b, rnd() * 3, 1.2, etat); }
     } else if (s.type === 'reserve') {
-      M.vegetation(D, 'F', e, x, y, z, R, 1, 1.2);
+      M.vegetation(D, 'F', e, x, y, z, R, 1, 1.2, (a, b, r) => this.libre(a, b, r));
     }
+    for (const k of ['g', 'o']) for (const geo of D[k]) D0[k].push(geo);
+  }
+
+  // un point est-il libre (loin des routes et pistes) ?
+  libre(x, z, r = 1.2) {
+    const i = this.cellule(x, z); if (i < 0) return true;
+    for (const j of [i, ...this.voisins(i)]) {
+      const l = j >= 0 && this.bord?.get(j); if (!l) continue;
+      for (let k = 0; k < l.length; k += 3) { const d = Math.hypot(l[k] - x, l[k + 1] - z); if (d < l[k + 2] + r) return false; }
+    }
+    return true;
   }
 
   // ------------------------------------------------------------------ eau, routes, installations
@@ -146,16 +162,17 @@ export class Plateau {
     return p;
   }
   _routes() {
-    const C = this.C, L = lot(), P = lot();
-    for (const r of C.routes) {
-      const pts = this._lisser(r.c.map(i => [this.X[i], Math.max(this.top[i], C.fuel[i] === 'R' ? this.top[i] + 0.9 : this.top[i]) + 0.14, this.Z[i]]));
-      const w = r.n === 3 ? 1.0 : r.n === 2 ? 0.75 : 0.42;
-      if (r.n >= 2) { put(L, ruban(pts.map(p => [p[0], p[1] - 0.02, p[2]]), w + 0.32), 0x6b5236, 0, 0, 0, 0, 0); put(L, ruban(pts, w), r.n === 3 ? 0x8d8a84 : 0xa39d92, 0, 0, 0, 0, 0); }
-      else put(P, ruban(pts, w), 0xe0cc98, 0, 0, 0, 0, 0);
-    }
-    // ponts
-    for (const r of C.routes) for (const i of r.c) if (C.fuel[i] === 'R' && r.n >= 2) put(L, boite(R * 1.2, 0.5, 2.2), 0xb9ae96, this.X[i], this.top[i] + 0.8, this.Z[i], 0, 0.15);
-    this.routes = fige(L, this.groupe, { ombre: false }); this.pistes = fige(P, this.groupe, { ombre: false, contour: false });
+    const C = this.C, L = lot(), D = lot();
+    const voies = C.routes.map(r => ({ n: r.n, p: (r.p || r.c.map(i => this.versMetres(this.X[i], this.Z[i]))).map(([x, y]) => this.vers3D(x, y)) }));
+    const haut = (x, z) => { const i = this.cellule(x, z); if (i < 0) return -0.6; const f = C.fuel[i]; return f === 'R' ? this.top[i] + 0.9 : (f === 'L' || f === 'M') ? -0.3 : this.top[i]; };
+    const sol = (x, z) => Math.max(haut(x, z), haut(x + 1.6, z), haut(x - 1.6, z), haut(x, z + 1.6), haut(x, z - 1.6));
+    const site = (x, z) => { const i = this.cellule(x, z); const k = i >= 0 ? this.site[i] : -1; return k >= 0 && ['ville', 'village', 'camping'].includes(C.sites[k].type) ? k : -1; };
+    const pont = (x, z) => { const i = this.cellule(x, z); return i >= 0 && C.fuel[i] === 'R'; };
+    const route = (x, z) => { const i = this.cellule(x, z); return i >= 0 && [i, ...this.voisins(i)].some(j => j >= 0 && +C.route[j] >= 2); };
+    this.bord = new Map();          // cellule -> points des voies (pour ne rien construire dessus)
+    const marquer = (x, z, w) => { const i = this.cellule(x, z); if (i < 0) return; let l = this.bord.get(i); if (!l) this.bord.set(i, l = []); l.push(x, z, w); };
+    dessinerVoies(voies, { s: 1, deco: 1.6, sol, site, pont, route, marquer }, L, D);
+    this.routes = fige(L, this.groupe, { ombre: false, contour: false }); this.panneaux = fige(D, this.groupe);
     // la rivière : un ruban d'eau vive
     if (C.riviere?.length > 1) {
       const pts = this._lisser(C.riviere.map(i => [this.X[i], this.top[i] + 0.12, this.Z[i]]));

@@ -165,6 +165,51 @@ class TestEvacuation(unittest.TestCase):
         self.assertGreater(ouest, est)
 
 
+class TestVoies(unittest.TestCase):
+    def test_reseau_propre(self):
+        for th in ('landes', 'mediterranee'):
+            c = Carte(4, th)
+            aretes = set()
+            for r in c.routes_poly:
+                self.assertGreaterEqual(len(r['p']), 2)
+                for a, b in zip(r['c'], r['c'][1:]):
+                    e = (min(a, b), max(a, b))
+                    self.assertNotIn(e, aretes, 'tronçon dessiné deux fois')
+                    aretes.add(e)
+                    self.assertEqual(c.g.distance(a, b), 1)
+                for i in r['c']:
+                    self.assertNotIn(c.fuel[i], 'ML', 'une voie dans l\'eau')
+
+    def test_bonus_malus(self):
+        p = partie_calme()
+        c, g = p.carte, p.carte.g
+        piste = next(i for i in range(g.n) if c.route[i] == 1)
+        route = next(i for i in range(g.n) if c.route[i] >= 2 and c.site_de[i] < 0)
+        u = next(m for m in p.moyens if m.kind == 'ccf')
+        # piste étroite : à trois engins on n'avance plus qu'au pas
+        p.trafic_engins = {piste: 3}
+        self.assertLess(u.facteur_voie(p, piste), 0.5)
+        # route : les convois font des bouchons, la fumée ralentit
+        p.trafic_convois = {route: 2}
+        self.assertLess(u.facteur_voie(p, route), 0.5)
+        # piste qui longe un feu intense : fermée aux camions
+        p.danger = {piste}
+        u.cell = next(j for j in g.voisins(piste) if j != piste)
+        dest = next(j for j in g.anneau(piste, 3) if g.distance(j, piste) == 3 and c.fuel[j] not in 'MLR')
+        u.aller(p, dest)
+        self.assertNotIn(piste, u.chemin)
+
+    def test_pas_de_convoi_sur_les_pistes(self):
+        p = partie_calme(SANS_MOYENS)
+        for s in p.carte.sites:
+            if s['type'] in ('village', 'camping'):
+                p.action(dict(type='evacuer', site=s['id']))
+        for _ in range(60):
+            p.pas()
+            for cv in p.evac.convois:
+                self.assertTrue(p.carte.route[cv.cell] >= 2 or p.carte.site_de[cv.cell] >= 0)
+
+
 class TestExport(unittest.TestCase):
     def test_json(self):
         p = Partie(4, 'mediterranee', 'mistral')
