@@ -5,6 +5,7 @@
 // le Dash pose sa ligne rouge, le bulldozer ouvre le pare-feu. Des étiquettes montrent la stratégie du commandement.
 import { THREE, SQ3, MAT, CONT, DEGRADE, Camera, put, lot, fige, jeter, cyl, boite, sphere, cone, semer, rnd, entre, hache, clamp, lerp } from './moteur.js';
 import * as M from './modeles.js';
+import { Convois } from './plateau.js';
 import * as UI from './ui.js';
 
 const RAY = 4;            // rayon de la zone, en hexagones de la carte
@@ -114,6 +115,7 @@ export class Intervention {
     this._feux();
     this.unites = new Map();
     this.passes = [];
+    this.convois = new Convois({ scene: this.monde }, 2.2, { vers: (a, b) => this.vers3(a, b), sol: (x, z) => this.hauteurSous(x, z) });
     this.lances = new THREE.Group(); this.monde.add(this.lances);
     this.etis = new Map();
   }
@@ -288,6 +290,8 @@ export class Intervention {
     // le bâti brûle avec son hexagone
     for (const [i, g] of this.bati) { const e = E.etat[i] === 'b' ? 'b' : '.'; if (g.userData.e !== e) this._batiCellule(i, e); }
     this._unites(E, now);
+    const lim = (RAY + 1) * C.hexM;
+    this.convois.maj((E.evac?.convois || []).filter(c => Math.hypot(c.x - this.mx0, c.y - this.my0) < lim), now);
     this._hud(E);
   }
   _arbres() {
@@ -481,8 +485,9 @@ export class Intervention {
       cc.setRGB(0.3 + u * 0.5 - p.d * 0.1, 0.29 + u * 0.48 - p.d * 0.1, 0.28 + u * 0.46 - p.d * 0.1); this.fumee.setColorAt(m2, cc); m2++;
     }
     this.fumee.count = m2; this.fumee.instanceMatrix.needsUpdate = true; this.fumee.instanceColor.needsUpdate = true;
-    // moyens
+    // moyens et convois
     this._animeUnites(dt, t, now, duree);
+    this.convois.anime(dt, t, now, duree);
     // passes de largage
     for (let k = this.passes.length - 1; k >= 0; k--) {
       const p = this.passes[k]; p.t += dt; const u = p.t / p.T;

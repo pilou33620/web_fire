@@ -6,10 +6,12 @@ C'est la seule porte d'entrée pour le serveur (server.py) comme pour la version
 import math
 import random
 
+from . import ordres
 from .carte import Carte
 from .combustibles import COMB, EAU, HABITE
 from .feu import BRULE, BRULE_FINI, ETEINT, NOYE, INTACT, Feu
 from .ia import Commandement
+from .evacuation import Evacuation
 from .meteo import Meteo
 from .moyens import Moyen
 
@@ -36,6 +38,7 @@ class Partie:
         self.moyens = []
         self._creer_moyens()
         self.ia = Commandement(self, doctrine)
+        self.evac = Evacuation(self)
         self.prochain_depart = 25 if premier_feu else self._delai_depart()
         self.renforts_attente = []
         self.journal_ajout('info', f"{self.meteo.heure()} — {self.meteo.sc['nom']}. Risque {self.meteo.niveau.lower()}.")
@@ -209,6 +212,7 @@ class Partie:
         self.ia.pas()
         for u in self.moyens:
             u.pas(self)
+        self.evac.pas()
 
     # ------------------------------------------------------------------ actions du joueur
     def action(self, a):
@@ -238,6 +242,31 @@ class Partie:
             self.meteo.maj()
             self.journal_ajout('info', f"Le vent tourne : du {self.meteo.de}° à {round(self.meteo.vent)} km/h.")
             return dict(ok=True)
+        if typ == 'ordre':
+            return ordres.donner(self, [int(x) for x in a.get('moyens', [])], a.get('ordre'),
+                                 None if a.get('cell') is None else int(a['cell']),
+                                 None if a.get('cell2') is None else int(a['cell2']))
+        if typ == 'commandement':
+            v = 'manuel' if a.get('valeur') == 'manuel' else 'auto'
+            if v != self.ia.mode:
+                self.ia.mode = v
+                if v == 'manuel':
+                    self.journal_ajout('joueur', "Vous prenez le commandement des opérations. Les moyens gardent leur mission en cours ; à vous de donner les ordres.")
+                    for u in self.moyens:
+                        if u.mission and u.mission.get('type') in ('preposition', 'gaar'):
+                            u.mission = None
+                else:
+                    self.journal_ajout('cos', "L'IA reprend le commandement des opérations (vos ordres en cours sont respectés).")
+            return dict(ok=True)
+        if typ in ('evacuer', 'confiner'):
+            sid = int(a['site'])
+            ok = (self.evac.evacuer if typ == 'evacuer' else self.evac.confiner)(sid, par='joueur')
+            return dict(ok=ok, erreur=None if ok else ('Aucun itinéraire sûr pour évacuer.' if typ == 'evacuer' else 'Déjà fait.'))
+        if typ == 'renfort':
+            if sum(1 for _ in self.renforts_attente) >= 2:
+                return dict(ok=False, erreur='Deux colonnes sont déjà en route.')
+            self.demander_renfort(4)
+            return dict(ok=True)
         if typ == 'doctrine':
             self.ia.doctrine = a.get('valeur', 'equilibree')
             self.journal_ajout('cos', f"Doctrine du commandement : {self.ia.doctrine}.")
@@ -259,14 +288,16 @@ class Partie:
             menace = min([f['menaces'].get(s['id'], 9999) for f in self.ia.feux.values() if f['statut'] != 'éteint'] + [9999])
             etat = 'détruit' if part > 0.6 else 'touché' if brule else 'menacé' if menace < 150 else 'sauf'
             sites.append(dict(id=s['id'], etat=etat, part=round(part, 2), eta=menace if menace < 9999 else None,
-                              evacue=s['id'] in self.evacues,
+                              evacue=s['id'] in self.evacues, evac=self.evac.sites.get(s['id'], {}).get('statut'),
                               defenseurs=sum(1 for u in self.moyens if u.mission and u.mission.get('site') == s['id'])))
         ha = feu.surface_ha()
         perdus = sum(s['part'] * c.sites[s['id']]['valeur'] for s in sites)
-        score = max(0, round(100 - 12 * math.log10(1 + ha) - perdus * 0.6))
+        pers = self.evac.bilan()
+        score = max(0, round(100 - 12 * math.log10(1 + ha) - perdus * 0.6 - pers['exposes'] / 40))
         return sites, dict(ha=round(ha, 1), litres=round(feu.litres), litresRetardant=round(feu.litres_ret),
                            largages=self.stats['largages'], departs=self.stats['departs'], renforts=self.stats['renforts'],
                            defriche=self.stats['defriche'], score=score,
+                           personnes=pers,
                            feuxActifs=sum(1 for f in self.ia.feux.values() if f['statut'] not in ('éteint',)),
                            maisons=round(sum(s['part'] * c.sites[s['id']]['pop'] / 3 for s in sites
                                              if c.sites[s['id']]['type'] in ('ville', 'village'))))
@@ -285,6 +316,6 @@ class Partie:
             ret=[i for i in range(n) if feu.ret[i] > 0],
             moyens=[u.export() for u in self.moyens], feux=self.ia.export(), sites=sites, stats=stats,
             journal=[j for j in self.journal if j['id'] > depuis], evts=[e for e in self.evts if e['id'] > depuis],
-            seq=self.seq, doctrine=self.ia.doctrine,
+            seq=self.seq, doctrine=self.ia.doctrine, commandement=self.ia.mode, evac=self.evac.export(),
             departs=[dict(cell=d['cell'], detecte=d['detecte']) for d in feu.departs],
         )
