@@ -3,6 +3,7 @@
 
 Lancement :  python server.py            (puis ouvrir http://127.0.0.1:8780)
 Options   :  --port 8780  --lan (ouvert au réseau local, pour l'iPad)  --no-browser
+Avec --lan, un autre appareil saisit une fois le code d'appairage affiché dans la console (appairage.py).
 Aucune dépendance externe : Python 3.8+ suffit (Windows, Linux, macOS, Raspberry Pi, Termux).
 
 La simulation tourne dans un fil à part ; l'interface interroge /api/etat quelques fois par seconde.
@@ -25,8 +26,11 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 WEB = os.path.join(ROOT, 'web')
 sys.path.insert(0, ROOT)
 
+import appairage  # noqa: E402
 from jeu.meteo import SCENARIOS  # noqa: E402
 from jeu.partie import LIMITES, MOYENS_DEFAUT, Partie  # noqa: E402
+
+GARDE = appairage.Garde('Web Fire', actif=False)   # remplacé dans main() selon --lan
 
 VITESSES = [0.25, 0.5, 1, 2, 4, 8, 16]      # minutes de jeu par seconde réelle
 
@@ -112,6 +116,10 @@ def infos():
 class Handler(BaseHTTPRequestHandler):
     server_version = 'FeuxDeForet/1.0'
 
+    def parse_request(self):
+        # Host contrôlé, et code d'appairage exigé des autres appareils du réseau
+        return super().parse_request() and GARDE.filtrer(self)
+
     def log_message(self, fmt, *args):
         pass
 
@@ -184,7 +192,7 @@ def adresse_locale():
 
 
 def main():
-    global SIM
+    global SIM, GARDE
     ap = argparse.ArgumentParser(description='Simulateur de feux de forêt')
     ap.add_argument('--port', type=int, default=8780)
     ap.add_argument('--lan', action='store_true', help='ouvrir au réseau local (iPad, téléphone)')
@@ -193,11 +201,15 @@ def main():
     print('Préparation de la carte…', flush=True)
     SIM = Simulation()
     hote = '0.0.0.0' if args.lan else '127.0.0.1'
+    GARDE = appairage.Garde('Web Fire', actif=args.lan)
     srv = ThreadingHTTPServer((hote, args.port), Handler)
+    GARDE.brancher(srv)                 # avec --lan : HTTPS sur le même port
     url = f'http://127.0.0.1:{args.port}'
     print(f'Simulateur prêt : {url}', flush=True)
     if args.lan:
-        print(f'Sur le réseau local : http://{adresse_locale()}:{args.port}', flush=True)
+        print(f'Sur le réseau local : {GARDE.adresse(adresse_locale(), args.port)}', flush=True)
+        print("  l'autre appareil demande une fois le code d'appairage ci-dessous", flush=True)
+        GARDE.annoncer()
     if not args.no_browser and not os.environ.get('TERMUX_VERSION') and (os.environ.get('DISPLAY') or sys.platform in ('win32', 'darwin')):
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
     try:

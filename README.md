@@ -16,6 +16,10 @@ python server.py --lan      # ouvert au réseau local (iPad, téléphone) — pr
 
 `lancer.sh` (Linux, macOS, Termux) et `lancer.bat` (Windows) font la même chose.
 
+Avec `--lan`, un autre appareil saisit une fois le **code d'appairage** affiché dans la console
+(`appairage.py`, le même que les autres web tools du poste : un appareil déjà appairé est reconnu).
+Le serveur sert alors aussi HTTPS sur son port ; ce poste lui-même n'a jamais besoin du code.
+
 **Sans serveur** : `python outils/statique.py` fabrique `dist/`, une version où le même moteur Python tourne dans le
 navigateur grâce à Pyodide (à héberger n'importe où, ou à servir avec `python -m http.server`). Si Python ne peut
 pas se charger, la page rejoue une journée enregistrée du vrai moteur (lecture seule).
