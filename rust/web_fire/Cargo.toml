@@ -1,0 +1,16 @@
+[package]
+name = "web_fire"
+version = "0.1.0"
+edition = "2021"
+description = "Simulateur de feux de forêt : le serveur local (interface web/ et API)"
+
+[lib]
+doctest = false
+
+[dependencies]
+feu = { path = "../feu" }
+serde_json = { version = "1", features = ["preserve_order"] }
+# réponses compressées (la carte fait plusieurs centaines de Ko) : l'iPad la charge vite sur le Wi-Fi
+flate2 = "1"
+# Serveur HTTP/HTTPS et appairage : communs aux web tools (dépôt web_suite)
+web_tools_commun = { git = "https://github.com/pilou33620/web_suite", rev = "d40186eebfe11773b92a497c69d25b641264cd0d" }

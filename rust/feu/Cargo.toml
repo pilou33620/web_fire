@@ -1,0 +1,14 @@
+[package]
+name = "feu"
+version = "0.1.0"
+edition = "2021"
+description = "Simulateur de feux de forêt : le moteur (carte de la Gironde, météo, propagation, moyens, commandement), sans réseau"
+
+[lib]
+doctest = false
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+# dictionnaires et ensembles qui gardent l'ordre d'insertion, comme ceux de Python : parties reproductibles
+indexmap = "2"

@@ -1,0 +1,11 @@
+[workspace]
+resolver = "2"
+members = ["rust/feu", "rust/web_fire", "rust/feu_wasm"]
+
+[profile.release]
+opt-level = 3
+strip = true
+
+# la génération de la carte et les journées simulées des essais sont lentes sans optimisation
+[profile.dev]
+opt-level = 2

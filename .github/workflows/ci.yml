@@ -1,0 +1,26 @@
+name: bancs d'essai
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  essais:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # le moteur (carte, feu, moyens, commandement, évacuations), le serveur et la liaison WebAssembly
+      - name: Moteur et serveur (Rust)
+        run: cargo test --release --workspace
+
+      # l'interface : chaque module JavaScript doit au moins se lire
+      - name: Interface (syntaxe)
+        run: for f in $(find web/js -name '*.js'); do node --experimental-default-type=module --check "$f" || exit 1; done

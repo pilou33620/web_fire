@@ -2,3 +2,11 @@ __pycache__/
 *.pyc
 dist/
 page/
+
+# Rust : compilation et exécutables (compilés ici ou téléchargés), moteur WebAssembly téléchargé
+/target/
+/bin/
+/web/wasm/
+web/demo/
+*.local.json
+journaux/

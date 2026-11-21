@@ -1,0 +1,15 @@
+[package]
+name = "feu_wasm"
+version = "0.1.0"
+edition = "2021"
+description = "Simulateur de feux de forêt : le moteur compilé en WebAssembly, pour jouer dans le navigateur sans serveur"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+doctest = false
+
+[dependencies]
+feu = { path = "../feu" }
+serde_json = { version = "1", features = ["preserve_order"] }
+# liaison avec JavaScript (wasm-bindgen --target web) ; la CI installe wasm-bindgen-cli à la même version
+wasm-bindgen = "0.2"
