@@ -367,16 +367,28 @@ fn dragon_et_vsav_secourent() {
 
 #[test]
 fn ravitailleur() {
+    // le camion attend à son poste, au cœur du massif : un camion à sec y reçoit la visite du ravitailleur
+    // (en Python, le camion roulait encore et le ravitailleur n'arrivait qu'à la dernière minute : trop fragile)
     let mut p = partie_calme(None);
-    let id = p.moyens.iter().find(|m| m.kind == "ccf").unwrap().id;
     let i0 = pins(&p);
+    let k = p.moyens.iter().position(|m| m.kind == "ccf").unwrap();
+    let id = p.moyens[k].id;
+    let (x, y) = (p.carte.g.cx[i0], p.carte.g.cy[i0]);
+    let u = &mut p.moyens[k];
+    u.cell = i0;
+    u.x = x;
+    u.y = y;
     p.action(&json!({"type": "ordre", "moyens": [id], "ordre": "poster", "cell": i0})).unwrap();
     pas(&mut p, 30);
-    let max = p.moyens[id].carb_max.unwrap();
-    p.moyens[id].carb = 0.2 * max;
-    let n = (60.0 / p.carte.g.ech).round() as usize;
-    pas(&mut p, n);
-    assert!(p.moyens[id].carb > 0.9 * max, "gazole : {}", p.moyens[id].carb);
+    let max = p.moyens[k].carb_max.unwrap();
+    p.moyens[k].carb = 0.2 * max;
+    for _ in 0..300 {
+        p.pas();
+        if p.moyens[k].carb > 0.9 * max {
+            return;
+        }
+    }
+    panic!("gazole : {}", p.moyens[k].carb);
 }
 
 #[test]
