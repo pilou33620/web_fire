@@ -1,8 +1,8 @@
-// La liaison avec le moteur Python, de trois façons qui offrent la même interface :
-// 1. par le serveur (server.py, sur le Pi ou le PC) ;
-// 2. sans serveur, par Pyodide : le même code Python tourne dans la page ;
-// 3. si Python ne peut pas se charger (page publiée trop restreinte, pas de réseau), une démo enregistrée du vrai
-//    moteur est rejouée (outils/enregistrer.py).
+// La liaison avec le moteur (Rust), de trois façons qui offrent la même interface :
+// 1. par le serveur (bin/web_fire, sur le Pi ou le PC) ;
+// 2. sans serveur, par WebAssembly : le même moteur tourne dans la page (web/wasm/) ;
+// 3. si le moteur ne peut pas se charger (web/wasm/ absent, navigateur trop ancien), une démo enregistrée du vrai
+//    moteur est rejouée (web/demo/rejeu.json, fabriqué par « cargo run -p feu --bin enregistrer »).
 
 export class LiaisonHTTP {
   constructor() { this.mode = 'serveur'; }
@@ -15,74 +15,19 @@ export class LiaisonHTTP {
   }
 }
 
-const GLUE = `
-import json, sys, time
-sys.path.insert(0, '/home/pyodide')
-from jeu.partie import Partie, MOYENS_DEFAUT, LIMITES
-from jeu.meteo import SCENARIOS
-
-class Sim:
-    def __init__(self):
-        self.reglages = dict(graine=7, theme='gironde', scenario='canicule', moyens=dict(MOYENS_DEFAUT), doctrine='equilibree')
-        self.nouvelle({})
-    def nouvelle(self, r):
-        r = {**self.reglages, **(r or {})}
-        r['graine'] = int(r.get('graine') or 1)
-        self.partie = Partie(r['graine'], r['theme'], r['scenario'], r.get('moyens'), r.get('doctrine', 'equilibree'))
-        self.reglages = r
-        self.id = int(time.time() * 1000) % 10 ** 9
-    def carte(self):
-        return json.dumps(self.partie.export_carte(), ensure_ascii=False)
-    def etat(self, depuis, vitesse, pause):
-        e = self.partie.export_etat(int(depuis))
-        e.update(vitesse=vitesse, pause=pause, partie=self.id, reglages=self.reglages)
-        return json.dumps(e, ensure_ascii=False, separators=(',', ':'))
-    def pas(self, n):
-        for _ in range(int(n)):
-            self.partie.pas()
-    def action(self, txt):
-        a = json.loads(txt)
-        if a.get('type') == 'nouvelle':
-            self.nouvelle(a.get('reglages'))
-            return json.dumps(dict(ok=True, partie=self.id))
-        if a.get('type') == 'avancer':
-            self.pas(max(1, min(600, int(a.get('minutes', 10)))))
-            return json.dumps(dict(ok=True))
-        return json.dumps(self.partie.action(a), ensure_ascii=False)
-    def infos(self):
-        return json.dumps(dict(scenarios={k: v['nom'] for k, v in SCENARIOS.items()},
-                               themes={'gironde': 'Gironde'},
-                               limites=LIMITES, defaut=MOYENS_DEFAUT, vitesses=[0.25, 0.5, 1, 2, 4, 8, 16]), ensure_ascii=False)
-
-sim = Sim()
-`;
-
 const BASE = new URL('../', import.meta.url).href;
-async function existe(url) { try { const r = await fetch(url, { method: 'HEAD', cache: 'no-store' }); return r.ok; } catch (e) { return false; } }
-function chargerScript(src) {
-  return new Promise((ok, ko) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => ko(new Error('script refusé : ' + src)); document.head.appendChild(s); });
-}
-const delai = (p, ms, quoi) => Promise.race([p, new Promise((_, ko) => setTimeout(() => ko(new Error(quoi + ' : délai dépassé')), ms))]);
 
-export class LiaisonPyodide {
+// le moteur compilé en WebAssembly (web/wasm/, mis là par binaires.sh) : même interface que l'ancienne liaison Pyodide
+export class LiaisonWasm {
   constructor() { this.mode = 'navigateur'; this.vitesse = 1; this.pause = false; this.reste = 0; }
   async init(progres) {
-    let url = BASE + 'vendor/pyodide/';
-    if (!await existe(url + 'pyodide.js')) url = 'https://cdn.jsdelivr.net/pyodide/v0.27.7/full/';
-    progres('Téléchargement de Python (environ 10 Mo)…');
-    if (!window.loadPyodide) await delai(chargerScript(url + 'pyodide.js'), 20000, 'pyodide.js');
-    const py = await delai(window.loadPyodide({ indexURL: url }), 45000, 'Pyodide');
-    progres('Installation du moteur…');
-    const man = await (await fetch(BASE + 'py/manifest.json')).json();
-    py.FS.mkdirTree('/home/pyodide/jeu');
-    for (const e of man.fichiers) {
-      const f = typeof e === 'string' ? e : e.f, u = typeof e === 'string' ? e : e.u;
-      py.FS.writeFile('/home/pyodide/' + f, await (await fetch(BASE + 'py/' + u)).text());
-    }
+    progres('Chargement du moteur (WebAssembly)…');
+    let mod;
+    try { mod = await import(BASE + 'wasm/feu_wasm.js'); await mod.default(); }
+    catch (e) { throw new Error('moteur WebAssembly absent (dossier web/wasm/ : lancez binaires.sh)'); }
     progres('Génération de la carte…');
     await new Promise(r => setTimeout(r, 30));
-    py.runPython(GLUE);
-    this.sim = py.globals.get('sim');
+    this.sim = new mod.Sim();
     this.dernier = performance.now();
     setInterval(() => this.boucle(), 100);
   }
@@ -131,11 +76,11 @@ export class LiaisonRejeu {
   async action(a) {
     if (a.type === 'vitesse') { this.vitesse = +a.valeur || 1; this.pause = false; return { ok: true }; }
     if (a.type === 'pause') { this.pause = a.valeur === undefined ? !this.pause : !!a.valeur; return { ok: true }; }
-    return { ok: false, erreur: "Démo enregistrée : ici on ne peut que regarder. Lancez server.py (ou la version dist/) pour jouer." };
+    return { ok: false, erreur: "Démo enregistrée : ici on ne peut que regarder. Lancez lancer.sh (ou ouvrez la page avec web/wasm/) pour jouer." };
   }
 }
 
-// le serveur répond-il ? sinon Pyodide ; sinon la démo enregistrée
+// le serveur répond-il ? sinon WebAssembly ; sinon la démo enregistrée
 export async function choisirLiaison(progres) {
   if (!location.hash.includes('navigateur') && !location.hash.includes('demo')) {
     try {
@@ -146,7 +91,7 @@ export async function choisirLiaison(progres) {
   }
   let raison = '';
   if (!location.hash.includes('demo')) {
-    try { const L = new LiaisonPyodide(); await L.init(progres); return L; } catch (e) { raison = e.message || String(e); console.warn('Pyodide indisponible :', e); }
+    try { const L = new LiaisonWasm(); await L.init(progres); return L; } catch (e) { raison = e.message || String(e); console.warn('WebAssembly indisponible :', e); }
   }
   const L = new LiaisonRejeu();
   await L.init(progres);

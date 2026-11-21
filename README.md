@@ -5,24 +5,46 @@ contours sombres), des villes, des campings et des sites à protéger, des dépa
 automatique qui engage camions, bulldozers, hélicoptères, Canadair et Dash 8 pour sauver ce qui peut l'être.
 La météo (vent, chaleur, humidité, sécheresse, nuit, orages) pilote l'avancée du feu.
 
-Moteur en **Python** (aucune dépendance), interface **web** (HTML/CSS/JS, Three.js inclus dans `web/vendor`).
+Moteur et serveur en **Rust** (moteur aussi compilé en WebAssembly pour jouer sans serveur), interface **web**
+(HTML/CSS/JS, Three.js inclus dans `web/vendor`).
 
-## Lancer
+## Installation et lancement
 
 ```bash
-python server.py            # puis ouvrir http://127.0.0.1:8780
-python server.py --lan      # ouvert au réseau local (iPad, téléphone) — pratique sur le Raspberry Pi
+./lancer.sh                 # puis ouvrir http://127.0.0.1:8797
+./lancer.sh --lan           # ouvert au réseau local (iPad, téléphone) — pratique sur le Raspberry Pi
 ```
 
-`lancer.sh` (Linux, macOS, Termux) et `lancer.bat` (Windows) font la même chose.
+Sous Windows : `lancer.bat`. Rust n'est pas nécessaire : `binaires.sh` (`binaires.cmd`) télécharge l'exécutable du poste
+(Raspberry Pi aarch64, Linux x86_64, macOS, Windows) et le moteur WebAssembly depuis la publication GitHub « binaires »,
+compilée par la CI à chaque envoi sur `main`, en vérifiant leur empreinte SHA-256, une fois par version. Avec Rust
+(`cargo`) sur le poste, ils sont compilés sur place (le WASM seulement si la cible `wasm32-unknown-unknown` et
+`wasm-bindgen` sont installés).
 
-Avec `--lan`, un autre appareil saisit une fois le **code d'appairage** affiché dans la console
-(`appairage.py`, le même que les autres web tools du poste : un appareil déjà appairé est reconnu).
-Le serveur sert alors aussi HTTPS sur son port ; ce poste lui-même n'a jamais besoin du code.
+Options : `--port N` (ou `--port=N`, défaut 8797 ; si le port est pris, le suivant libre), `--lan` (réseau local),
+`--local` (127.0.0.1 seulement, même avec `--lan`), `--no-browser` ou `--sans-navigateur` (ne pas ouvrir le navigateur),
+`--sans-pause`, `--sans-maj` et `--no-update` (acceptées pour le launcher, sans effet). Une option inconnue : code 2.
 
-**Sans serveur** : `python outils/statique.py` fabrique `dist/`, une version où le même moteur Python tourne dans le
-navigateur grâce à Pyodide (à héberger n'importe où, ou à servir avec `python -m http.server`). Si Python ne peut
-pas se charger, la page rejoue une journée enregistrée du vrai moteur (lecture seule).
+## Utiliser depuis un autre appareil
+
+Avec `--lan`, l'adresse réseau s'affiche dans la console et un autre appareil saisit une fois le **code d'appairage**
+affiché dans la console (le même jeton que les autres web tools du poste, caisse commune `web_tools_commun` : un appareil
+déjà appairé est reconnu). Le serveur sert alors aussi HTTPS sur son port ; le certificat de la CA du poste se
+télécharge sur `/appairage/ca.pem`. Ce poste lui-même n'a jamais besoin du code. Les actions de la page doivent être
+envoyées en JSON (`Content-Type: application/json`) : une page d'un autre site ne peut pas les forger.
+
+## Mises à jour
+
+Sous web_launcher, c'est le launcher qui met à jour (`git pull`) ; `lancer.sh` reprend alors l'exécutable de la
+nouvelle version. À la main : `git pull`, puis `./lancer.sh`. L'outil n'a pas de données à garder : rien n'est écrit sur
+disque en dehors de `bin/` et `web/wasm/` (ignorés par git).
+
+## Sans serveur
+
+`web/` est une page statique : avec `web/wasm/` (mis là par `binaires.sh`), elle fait tourner le moteur dans le
+navigateur quand aucun serveur ne répond (ou avec `#navigateur` dans l'adresse), et peut être hébergée n'importe où.
+Si le moteur ne peut pas se charger, la page rejoue une journée enregistrée du vrai moteur (lecture seule), à fabriquer
+par `cargo run --release -p feu --bin enregistrer` (écrit `web/demo/rejeu.json`).
 
 ## Ce qu'on voit
 
@@ -141,22 +163,28 @@ Scénarios : journée ordinaire, forte chaleur, canicule et vent d'est (type Lan
 5. surveillance et noyage des lisières quand le feu est fixé ;
 6. par risque très sévère : patrouilles préventives et guet aérien armé.
 
-Trois doctrines au choix (équilibrée, offensive, défensive). `python outils/banc.py` les compare sur les mêmes journées.
+Trois doctrines au choix (équilibrée, offensive, défensive).
 
 ## Fichiers
 
 | Fichier | Rôle |
 |---|---|
-| `server.py` | serveur local (simulation en continu, API `/api/carte`, `/api/etat`, `/api/action`) |
-| `jeu/partie.py` | une partie : carte, météo, feu, moyens, commandement ; départs de feu et détection |
-| `jeu/carte.py` | la carte de la Gironde en hexagones : combustibles, villes, sites, routes, pistes DFCI, casernes, vigies, aérodrome |
-| `jeu/gironde_data.py`, `outils/gironde.py` | la Gironde extraite de web_conquete (cases de 1 km) ; `python outils/gironde.py ../web_conquete` la refait |
-| `jeu/feu.py`, `jeu/meteo.py`, `jeu/combustibles.py` | le feu, la météo, les combustibles |
-| `jeu/moyens.py`, `jeu/ia.py` | les moyens de lutte et le commandement |
-| `jeu/ordres.py`, `jeu/evacuation.py` | vos ordres de COS ; évacuations, fumée, routes coupées |
+| `rust/web_fire/src/serveur.rs` | serveur local (simulation en continu, API `/api/carte`, `/api/etat`, `/api/infos`, `/api/action`), options |
+| `rust/feu/src/partie.rs` | une partie : carte, météo, feu, moyens, commandement ; départs de feu et détection |
+| `rust/feu/src/carte.rs` | la carte de la Gironde en hexagones : combustibles, villes, sites, routes, pistes DFCI, casernes, vigies, aérodrome |
+| `rust/feu/src/gironde.json`, `outils/gironde.py` | la Gironde extraite de web_conquete (cases de 1 km) ; `python3 outils/gironde.py ../web_conquete` la refait |
+| `rust/feu/src/feu.rs`, `meteo.rs`, `combustibles.rs` | le feu, la météo, les combustibles |
+| `rust/feu/src/moyens.rs`, `ia.rs` | les moyens de lutte et le commandement |
+| `rust/feu/src/ordres.rs`, `evacuation.rs` | vos ordres de COS ; évacuations, fumée, routes coupées |
+| `rust/feu_wasm/` | le moteur pour le navigateur (WebAssembly) |
 | `web/js/plateau.js`, `web/js/modeles.js`, `web/js/moteur.js` | le plateau 3D, les modèles, le moteur de rendu (repris de web_conquete) |
 | `web/js/intervention.js` | le mode Intervention |
 | `web/js/voies.js` | le dessin des routes et des pistes (commun aux deux vues) |
-| `web/js/liaison.js` | la liaison avec le serveur, ou Pyodide dans la page, ou la démo enregistrée |
-| `outils/enregistrer.py`, `outils/statique.py` | la démo rejouée ; la version sans serveur (`dist/`) |
-| `tests/` | `python -m unittest discover -s tests` |
+| `web/js/liaison.js` | la liaison avec le serveur, ou le moteur WebAssembly dans la page, ou la démo enregistrée |
+| `rust/feu/src/bin/enregistrer.rs` | la démo rejouée |
+
+## Tests
+
+`cargo test --release --workspace` : le moteur (`rust/feu/tests/moteur.rs`, les anciens tests Python), le serveur
+(routes, fichiers statiques, Host, JSON exigé, tailles, ligne de commande) et la liaison WebAssembly. Le Raspberry Pi
+n'ayant pas Rust, la CI GitHub les lance à chaque envoi (`.github/workflows/ci.yml`).

@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Extrait la Gironde de la carte de web_conquete (vraie géographie, cases de 1 km) vers jeu/gironde_data.py.
+"""Extrait la Gironde de la carte de web_conquete (vraie géographie, cases de 1 km) vers rust/feu/src/gironde.json.
 
     python outils/gironde.py ../web_conquete
 
-À relancer seulement si la carte de web_conquete change. Le jeu n'a pas besoin de web_conquete : il lit jeu/gironde_data.py.
+À relancer seulement si la carte de web_conquete change. Le jeu n'a pas besoin de web_conquete : il lit rust/feu/src/gironde.json (compilé dans le moteur).
 Le terrain de web_conquete (une carte d'époque : landes, marais) est traduit en combustibles d'aujourd'hui :
 la lande de Gascogne est devenue la pinède des Landes.
 """
+import json
 import os
 import sys
 
@@ -94,16 +95,10 @@ def main():
             cx, cy = sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts)
             if dedans(cx, cy):
                 eaux.append(dict(nom=w['name'], xy=km(cx, cy)))
-    with open(os.path.join(ROOT, 'jeu', 'gironde_data.py'), 'w', encoding='utf-8') as fh:
-        fh.write('"""La Gironde, extraite de la carte de web_conquete par outils/gironde.py (ne pas modifier à la main).\n\n'
-                 'Cases de 1 km, x vers l\'est, y vers le sud. FUEL : combustibles (jeu/combustibles.py) ; ALT : altitude, '
-                 'chr(48 + m / 4).\n"""\n')
-        fh.write(f'W, H = {W}, {H}\n')
-        for nom, rows in (('FUEL', fuel), ('ALT', alt)):
-            fh.write(f'{nom} = (\n' + ''.join(f'    {r!r},\n' for r in rows) + ')\n')
-        for nom, v in (('LIEUX', lieux), ('ROUTES', routes), ('SITES', sites), ('EAUX', eaux)):
-            fh.write(f'{nom} = [\n' + ''.join(f'    {x!r},\n' for x in v) + ']\n')
-        fh.write(f'AERODROME = {(AERODROME[0], km(*g.xy(AERODROME[1], AERODROME[2])))!r}\n')
+    d = dict(W=W, H=H, FUEL=list(fuel), ALT=list(alt), LIEUX=lieux, ROUTES=routes, SITES=sites, EAUX=eaux,
+             AERODROME=(AERODROME[0], km(*g.xy(AERODROME[1], AERODROME[2]))))
+    with open(os.path.join(ROOT, 'rust', 'feu', 'src', 'gironde.json'), 'w', encoding='utf-8') as fh:
+        fh.write(json.dumps(d, ensure_ascii=False, separators=(',', ':')) + '\n')
     print(f'{W} × {H} km, {len(lieux)} lieux, {len(routes)} routes, {len(eaux)} plans d\'eau')
 
 
