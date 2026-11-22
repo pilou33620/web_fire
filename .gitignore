@@ -5,6 +5,7 @@ page/
 
 # Rust : compilation et exécutables (compilés ici ou téléchargés), moteur WebAssembly téléchargé
 /target/
+outils/gironde/target/
 /bin/
 /web/wasm/
 web/demo/

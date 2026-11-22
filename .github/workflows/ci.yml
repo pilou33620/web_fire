@@ -24,3 +24,13 @@ jobs:
       # l'interface : chaque module JavaScript doit au moins se lire
       - name: Interface (syntaxe)
         run: for f in $(find web/js -name '*.js'); do node --experimental-default-type=module --check "$f" || exit 1; done
+
+  # outils/gironde refait la carte depuis web_conquete (version fixée dans son Cargo.toml) : elle doit rester,
+  # octet pour octet, celle que le moteur embarque
+  gironde:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Carte de la Gironde refaite, identique à rust/feu/src/gironde.json
+        run: cargo run --release --locked --manifest-path outils/gironde/Cargo.toml && git diff --exit-code --stat rust/feu/src/gironde.json

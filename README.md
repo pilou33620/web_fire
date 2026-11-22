@@ -191,7 +191,7 @@ Trois doctrines au choix (équilibrée, offensive, défensive).
 | `rust/web_fire/src/serveur.rs` | serveur local (simulation en continu, API `/api/carte`, `/api/etat`, `/api/infos`, `/api/action`), options |
 | `rust/feu/src/partie.rs` | une partie : carte, météo, feu, moyens, commandement ; départs de feu et détection |
 | `rust/feu/src/carte.rs` | la carte de la Gironde en hexagones : combustibles, villes, sites, routes, pistes DFCI, casernes, vigies, aérodrome |
-| `rust/feu/src/gironde.json`, `outils/gironde.py` | la Gironde extraite de web_conquete (cases de 1 km) ; `python3 outils/gironde.py ../web_conquete` la refait |
+| `rust/feu/src/gironde.json`, `outils/gironde/` | la Gironde extraite de web_conquete (cases de 1 km) ; `cargo run --release --manifest-path outils/gironde/Cargo.toml` la refait (outil de développement, hors de l'espace de travail : web_conquete n'est téléchargé que pour lui ; la CI vérifie que le résultat est identique) |
 | `rust/feu/src/feu.rs`, `meteo.rs`, `combustibles.rs` | le feu, la météo, les combustibles |
 | `rust/feu/src/moyens.rs`, `ia.rs` | les moyens de lutte et le commandement |
 | `rust/feu/src/ordres.rs`, `evacuation.rs` | vos ordres de COS ; évacuations, fumée, routes coupées |

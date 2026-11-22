@@ -1,0 +1,17 @@
+[package]
+name = "gironde"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Outil de développement : refait rust/feu/src/gironde.json d'après la carte de web_conquete"
+
+# Hors de l'espace de travail du jeu : web_conquete (et sa compilation) n'est téléchargé que pour cet outil,
+# et l'outil n'entre ni dans bin/ ni dans les archives publiées.
+[workspace]
+
+[dependencies]
+# la carte de web_conquete (moteur porté en Rust) ; changer de version ici refait une autre Gironde
+conquete = { git = "https://github.com/pilou33620/web_conquete", rev = "0c234a3b2c633f9894ab5ea32b13067e5d9e20be" }
+
+[profile.release]
+opt-level = 3

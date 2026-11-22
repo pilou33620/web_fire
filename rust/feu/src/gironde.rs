@@ -1,4 +1,4 @@
-//! La Gironde, extraite de la carte de web_conquete par outils/gironde.py (gironde.json : ne pas modifier à la main).
+//! La Gironde, extraite de la carte de web_conquete par outils/gironde (gironde.json : ne pas modifier à la main).
 //!
 //! Cases de 1 km, x vers l'est, y vers le sud. FUEL : combustibles (combustibles.rs) ; ALT : altitude, chr(48 + m / 4).
 
