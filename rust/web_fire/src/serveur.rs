@@ -17,9 +17,11 @@ use flate2::write::GzEncoder;
 use flate2::Compression;
 use serde_json::{json, Value};
 use web_tools_commun::appairage::{self, Garde};
+use web_tools_commun::production;
 use web_tools_commun::serveur::{decoder_chemin, ErreurCorps, Reponse, Requete, Serveur};
 
 pub const PORT: u16 = 8797;
+const DEPOT: &str = "https://github.com/pilou33620/web_fire";
 /// Une action de la page tient en quelques centaines d'octets.
 const CORPS_MAX: usize = 1024 * 1024;
 const JSON: &str = "application/json; charset=utf-8";
@@ -307,6 +309,22 @@ pub fn lire_args(argv: &[String]) -> Result<Args, String> {
     Ok(a)
 }
 
+/// Copie de production (archive web_fire-prod, sans git) : mise à jour depuis la publication
+/// « binaires » (§4.1 bis des règles). Sauf --sans-maj, et sauf à la relance qui suit une mise à jour.
+fn maj_production(argv: &[String]) {
+    let sans_maj = argv.iter().any(|x| x == "--sans-maj" || x == "--no-update");
+    if sans_maj || std::env::var_os("WEB_FIRE_DEJA_MAJ").is_some() || !production::est_copie_prod(racine()) {
+        return;
+    }
+    match production::mettre_a_jour(DEPOT, "web_fire", racine(), &|t| println!("{t}")) {
+        // demarrer_WEB_FIRE relance la nouvelle version ; lancé sans lui, on continue avec celle-ci
+        Ok(true) if std::env::var_os("WEB_FIRE_RELANCEUR").is_some() => std::process::exit(production::CODE_MIS_A_JOUR),
+        Ok(true) => println!("Mis à jour : relancez le simulateur pour en profiter."),
+        Ok(false) => {}
+        Err(e) => println!("[X] {e}"), // l'installation actuelle est intacte : on démarre
+    }
+}
+
 fn ouvrir_navigateur(url: &str) {
     let r = if cfg!(target_os = "windows") {
         Command::new("cmd").args(["/C", "start", "", url]).stdout(Stdio::null()).stderr(Stdio::null()).spawn()
@@ -330,6 +348,7 @@ pub fn main() {
         }
     };
     let _ = std::env::set_current_dir(racine());
+    maj_production(&argv);
     println!("Préparation de la carte…");
     let _ = std::io::stdout().flush();
     let sim = Arc::new(Mutex::new(Simulation::new()));

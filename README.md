@@ -10,20 +10,37 @@ Moteur et serveur en **Rust** (moteur aussi compilé en WebAssembly pour jouer s
 
 ## Installation et lancement
 
+### Le plus simple : l'archive de production (sans git, sans rien installer)
+
+Dans la [publication « binaires »](https://github.com/pilou33620/web_fire/releases/tag/binaires), prendre l'archive
+du système : `web_fire-prod-windows-x86_64.zip`, `web_fire-prod-linux-x86_64.tar.gz`,
+`web_fire-prod-linux-aarch64.tar.gz` (Raspberry Pi 64 bits) ou `web_fire-prod-macos-aarch64.tar.gz`. La décompresser où
+l'on veut (un dossier `web_fire/`), puis double-cliquer sur `demarrer_WEB_FIRE.cmd` (Windows) ou lancer
+`./demarrer_WEB_FIRE.sh`. À chaque démarrage (sauf `--sans-maj`), le simulateur compare son archive à la dernière
+publiée ; si elle a changé, il la télécharge, vérifie son empreinte SHA-256, recopie ses fichiers par-dessus et
+redémarre. Une coupure ou une archive abîmée ne touchent à rien.
+
+### Pour développer : le dépôt git
+
 ```bash
-./lancer.sh                 # puis ouvrir http://127.0.0.1:8797
-./lancer.sh --lan           # ouvert au réseau local (iPad, téléphone) — pratique sur le Raspberry Pi
+git clone https://github.com/pilou33620/web_fire.git
+./demarrer_WEB_FIRE.sh             # puis ouvrir http://127.0.0.1:8797
+./demarrer_WEB_FIRE.sh --lan       # ouvert au réseau local (iPad, téléphone) — pratique sur le Raspberry Pi
 ```
 
-Sous Windows : `lancer.bat`. Rust n'est pas nécessaire : `binaires.sh` (`binaires.cmd`) télécharge l'exécutable du poste
+Sous Windows : `demarrer_WEB_FIRE.cmd`. À la racine, seul le lanceur du système reste visible : le premier lancement
+masque l'autre. `lancer.sh` et `lancer.bat`, les anciens noms, relaient vers `demarrer_WEB_FIRE` avec les mêmes options.
+Rust n'est pas nécessaire : `scripts/binaires.sh` (`scripts\binaires.cmd`) télécharge l'exécutable du poste
 (Raspberry Pi aarch64, Linux x86_64, macOS, Windows) et le moteur WebAssembly depuis la publication GitHub « binaires »,
 compilée par la CI à chaque envoi sur `main`, en vérifiant leur empreinte SHA-256, une fois par version. Avec Rust
 (`cargo`) sur le poste, ils sont compilés sur place (le WASM seulement si la cible `wasm32-unknown-unknown` et
-`wasm-bindgen` sont installés).
+`wasm-bindgen` sont installés). Les autres archives de la publication sont des rouages : `web_fire-<système>`
+(l'exécutable seul) et `feu-wasm` (le moteur pour le navigateur), pris par `scripts/binaires`.
 
 Options : `--port N` (ou `--port=N`, défaut 8797 ; si le port est pris, le suivant libre), `--lan` (réseau local),
 `--local` (127.0.0.1 seulement, même avec `--lan`), `--no-browser` ou `--sans-navigateur` (ne pas ouvrir le navigateur),
-`--sans-pause`, `--sans-maj` et `--no-update` (acceptées pour le launcher, sans effet). Une option inconnue : code 2.
+`--sans-maj` ou `--no-update` (pas de mise à jour de la copie de production), `--sans-pause` (acceptée pour le
+launcher, sans effet). Une option inconnue : code 2.
 
 ## Utiliser depuis un autre appareil
 
@@ -35,13 +52,14 @@ envoyées en JSON (`Content-Type: application/json`) : une page d'un autre site 
 
 ## Mises à jour
 
-Sous web_launcher, c'est le launcher qui met à jour (`git pull`) ; `lancer.sh` reprend alors l'exécutable de la
-nouvelle version. À la main : `git pull`, puis `./lancer.sh`. L'outil n'a pas de données à garder : rien n'est écrit sur
-disque en dehors de `bin/` et `web/wasm/` (ignorés par git).
+Sous web_launcher, c'est le launcher qui met à jour (`git pull`) ; `demarrer_WEB_FIRE.sh` reprend alors l'exécutable
+de la nouvelle version. À la main : `git pull`, puis `./demarrer_WEB_FIRE.sh`. La copie de production se met à jour
+seule (voir *Installation*). L'outil n'a pas de données à garder : rien n'est écrit sur disque en dehors de `bin/` et
+`web/wasm/` (ignorés par git).
 
 ## Sans serveur
 
-`web/` est une page statique : avec `web/wasm/` (mis là par `binaires.sh`), elle fait tourner le moteur dans le
+`web/` est une page statique : avec `web/wasm/` (mis là par `scripts/binaires.sh`), elle fait tourner le moteur dans le
 navigateur quand aucun serveur ne répond (ou avec `#navigateur` dans l'adresse), et peut être hébergée n'importe où.
 Si le moteur ne peut pas se charger, la page rejoue une journée enregistrée du vrai moteur (lecture seule), à fabriquer
 par `cargo run --release -p feu --bin enregistrer` (écrit `web/demo/rejeu.json`).
@@ -169,6 +187,7 @@ Trois doctrines au choix (équilibrée, offensive, défensive).
 
 | Fichier | Rôle |
 |---|---|
+| `demarrer_WEB_FIRE.sh`, `.cmd` | le lancement : obtient l'exécutable (`scripts/binaires.*`), le lance, le relance après une mise à jour (code 75) |
 | `rust/web_fire/src/serveur.rs` | serveur local (simulation en continu, API `/api/carte`, `/api/etat`, `/api/infos`, `/api/action`), options |
 | `rust/feu/src/partie.rs` | une partie : carte, météo, feu, moyens, commandement ; départs de feu et détection |
 | `rust/feu/src/carte.rs` | la carte de la Gironde en hexagones : combustibles, villes, sites, routes, pistes DFCI, casernes, vigies, aérodrome |
@@ -187,4 +206,5 @@ Trois doctrines au choix (équilibrée, offensive, défensive).
 
 `cargo test --release --workspace` : le moteur (`rust/feu/tests/moteur.rs`, les anciens tests Python), le serveur
 (routes, fichiers statiques, Host, JSON exigé, tailles, ligne de commande) et la liaison WebAssembly. Le Raspberry Pi
-n'ayant pas Rust, la CI GitHub les lance à chaque envoi (`.github/workflows/ci.yml`).
+n'ayant pas Rust, la CI GitHub les lance à chaque envoi (`.github/workflows/ci.yml`) ; `binaires.yml` vérifie en plus
+que l'archive de production Linux, décompressée dans un dossier vide, démarre et sert la page.

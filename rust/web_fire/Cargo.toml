@@ -12,5 +12,5 @@ feu = { path = "../feu" }
 serde_json = { version = "1", features = ["preserve_order"] }
 # réponses compressées (la carte fait plusieurs centaines de Ko) : l'iPad la charge vite sur le Wi-Fi
 flate2 = "1"
-# Serveur HTTP/HTTPS et appairage : communs aux web tools (dépôt web_suite)
-web_tools_commun = { git = "https://github.com/pilou33620/web_suite", rev = "bc1f42ca77df7ccfc415a93018640058c82e2efe" }
+# Serveur HTTP/HTTPS, appairage et mise à jour d'une copie de production : communs aux web tools (dépôt web_suite)
+web_tools_commun = { git = "https://github.com/pilou33620/web_suite", rev = "a9d9d90638718302b92ee862bbd415c16bb218fc", features = ["production"] }

@@ -81,7 +81,7 @@ export function situation(E, C, sel, mode, raison) {
   const actifs = E.feux.filter(f => f.statut !== 'éteint');
   const finis = E.feux.filter(f => f.statut === 'éteint');
   let h = '';
-  if (mode === 'demo') h += `<div class="cos vous"><b>▶ Démo enregistrée</b><span>Le moteur n'a pas pu se charger sur cette page${raison ? ' (' + esc(raison) + ')' : ''}. Vous regardez une journée jouée par le vrai moteur : vitesse et pause marchent, mais pas les ordres. Pour jouer : <code>./lancer.sh</code> sur le Pi ou le PC.</span></div>`;
+  if (mode === 'demo') h += `<div class="cos vous"><b>▶ Démo enregistrée</b><span>Le moteur n'a pas pu se charger sur cette page${raison ? ' (' + esc(raison) + ')' : ''}. Vous regardez une journée jouée par le vrai moteur : vitesse et pause marchent, mais pas les ordres. Pour jouer : <code>./demarrer_WEB_FIRE.sh</code> sur le Pi ou le PC.</span></div>`;
   if (sel.cell != null) h += ficheCellule(E, C, sel.cell);
   if (sel.groupe?.length) h += ficheGroupe(E, sel.groupe, sel.arme);
   else if (sel.moyen != null) { const d = E.moyens.find(u => u.id === sel.moyen); if (d) h += ficheMoyen(d, C, E); }

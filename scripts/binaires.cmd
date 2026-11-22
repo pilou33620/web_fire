@@ -1,10 +1,12 @@
 @echo off
-rem Met l'executable du simulateur dans bin\ et le moteur WebAssembly dans web\wasm\ (appele par lancer.bat).
+rem Met l'executable du simulateur dans bin\ et le moteur WebAssembly dans web\wasm\ (appele par demarrer_WEB_FIRE.cmd, depuis la racine).
 rem Avec cargo sur le poste : compile ici, toujours a jour avec les sources.
 rem Sinon : telecharge depuis GitHub (publication "binaires", compilee par la CI a chaque
 rem envoi sur main), une fois par version : bin\commit dit de quelle version il vient.
 setlocal
 set DEPOT=https://github.com/pilou33620/web_fire/releases/download/binaires
+rem copie de production (publication "binaires", sans les sources) : executable et WASM y sont deja
+if not exist Cargo.toml if exist bin\web_fire.exe exit /b 0
 if not exist bin mkdir bin
 if not exist web\wasm mkdir web\wasm
 set ICI=

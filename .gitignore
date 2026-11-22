@@ -10,3 +10,5 @@ page/
 web/demo/
 *.local.json
 journaux/
+# fichiers masqués par demarrer_WEB_FIRE.sh (le lanceur Windows)
+.hidden

@@ -19,7 +19,7 @@ jobs:
 
       # le moteur (carte, feu, moyens, commandement, évacuations), le serveur et la liaison WebAssembly
       - name: Moteur et serveur (Rust)
-        run: cargo test --release --workspace
+        run: cargo test --release --workspace --locked
 
       # l'interface : chaque module JavaScript doit au moins se lire
       - name: Interface (syntaxe)

@@ -1,6 +1,6 @@
 #!/bin/sh
 # Met l'exécutable du simulateur dans bin/ et le moteur WebAssembly dans web/wasm/
-# (à inclure par « . ./binaires.sh » depuis la racine).
+# (à inclure par « . ./scripts/binaires.sh » depuis la racine).
 # Avec cargo sur le poste : compilés ici, toujours à jour avec les sources (le WASM seulement si la cible
 # wasm32-unknown-unknown et wasm-bindgen sont installés).
 # Sinon : téléchargés depuis GitHub (publication « binaires », compilée par la CI à chaque envoi sur main),
@@ -48,6 +48,8 @@ obtenir_wasm() {
 }
 
 obtenir_binaires() {
+  # copie de production (publication « binaires », sans les sources) : exécutable et WASM y sont déjà
+  if [ ! -f Cargo.toml ] && [ -x bin/web_fire ]; then return 0; fi
   mkdir -p bin
   if command -v cargo >/dev/null 2>&1; then
     cargo build --release -p web_fire --bins || return 1

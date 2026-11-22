@@ -17,14 +17,14 @@ export class LiaisonHTTP {
 
 const BASE = new URL('../', import.meta.url).href;
 
-// le moteur compilé en WebAssembly (web/wasm/, mis là par binaires.sh) : même interface que l'ancienne liaison Pyodide
+// le moteur compilé en WebAssembly (web/wasm/, mis là par scripts/binaires.sh) : même interface que l'ancienne liaison Pyodide
 export class LiaisonWasm {
   constructor() { this.mode = 'navigateur'; this.vitesse = 1; this.pause = false; this.reste = 0; }
   async init(progres) {
     progres('Chargement du moteur (WebAssembly)…');
     let mod;
     try { mod = await import(BASE + 'wasm/feu_wasm.js'); await mod.default(); }
-    catch (e) { throw new Error('moteur WebAssembly absent (dossier web/wasm/ : lancez binaires.sh)'); }
+    catch (e) { throw new Error('moteur WebAssembly absent (dossier web/wasm/ : lancez scripts/binaires.sh)'); }
     progres('Génération de la carte…');
     await new Promise(r => setTimeout(r, 30));
     this.sim = new mod.Sim();
@@ -76,7 +76,7 @@ export class LiaisonRejeu {
   async action(a) {
     if (a.type === 'vitesse') { this.vitesse = +a.valeur || 1; this.pause = false; return { ok: true }; }
     if (a.type === 'pause') { this.pause = a.valeur === undefined ? !this.pause : !!a.valeur; return { ok: true }; }
-    return { ok: false, erreur: "Démo enregistrée : ici on ne peut que regarder. Lancez lancer.sh (ou ouvrez la page avec web/wasm/) pour jouer." };
+    return { ok: false, erreur: "Démo enregistrée : ici on ne peut que regarder. Lancez demarrer_WEB_FIRE (ou ouvrez la page avec web/wasm/) pour jouer." };
   }
 }
 

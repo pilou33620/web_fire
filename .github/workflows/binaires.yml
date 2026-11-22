@@ -1,8 +1,12 @@
 name: exécutables
 
 # Compile le serveur pour chaque système et le moteur en WebAssembly, et les dépose dans la publication
-# « binaires » : web_fire-<système>.tar.gz (.zip sous Windows), feu-wasm.tar.gz et leurs empreintes SHA-256,
-# que binaires.sh et binaires.cmd prennent sur un poste sans cargo (Raspberry Pi, PC sans Rust).
+# « binaires », chaque archive avec son empreinte SHA-256 :
+# - web_fire-<système>.tar.gz (.zip sous Windows) et feu-wasm.tar.gz, que scripts/binaires.sh et
+#   scripts/binaires.cmd prennent sur un clone git sans cargo (Raspberry Pi, PC sans Rust) ;
+# - web_fire-prod-<système> : la production, sans git ni sources — l'exécutable, la page avec son
+#   moteur WebAssembly, demarrer_WEB_FIRE.*, scripts/ et le README. Elle se met à jour seule
+#   (web_tools_commun::production).
 on:
   push:
     branches: [main]
@@ -13,6 +17,8 @@ permissions:
 
 jobs:
   compiler:
+    # la copie de production emporte le moteur WebAssembly : il est compilé d'abord
+    needs: wasm
     strategy:
       fail-fast: false
       matrix:
@@ -51,6 +57,39 @@ jobs:
             tar -czf web_fire-${{ matrix.nom }}.tar.gz -C bin .
           fi
 
+      - uses: actions/download-artifact@v4
+        with:
+          name: wasm
+          path: web/wasm
+
+      - name: Archive de production (exécutable, page et moteur WebAssembly, scripts de démarrage)
+        shell: bash
+        run: |
+          P=prod/web_fire
+          mkdir -p $P
+          cp -r bin web scripts $P/ && cp demarrer_WEB_FIRE.sh demarrer_WEB_FIRE.cmd README.md $P/
+          if [ "${{ runner.os }}" = Windows ]; then
+            (cd prod && 7z a ../web_fire-prod-${{ matrix.nom }}.zip web_fire)
+          else
+            tar -czf web_fire-prod-${{ matrix.nom }}.tar.gz -C prod web_fire
+          fi
+
+      # l'archive de production, décompressée dans un dossier vide, doit démarrer et servir la page
+      - name: Essai de l'archive de production
+        if: matrix.nom == 'linux-x86_64'
+        run: |
+          mkdir essai && tar -xzf web_fire-prod-linux-x86_64.tar.gz -C essai
+          cd essai/web_fire
+          test ! -e .git && test ! -e Cargo.toml && test ! -e rust && test -f web/wasm/feu_wasm_bg.wasm
+          sh demarrer_WEB_FIRE.sh --port 18797 --sans-navigateur --sans-maj > ../journal.txt 2>&1 &
+          for i in $(seq 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18797/ || true)
+            [ "$code" = 200 ] && break
+            sleep 1
+          done
+          pkill -x web_fire || true
+          echo "réponse : $code"; [ "$code" = 200 ] || { cat ../journal.txt; exit 1; }
+
       - name: Publication
         shell: bash
         env:
@@ -59,12 +98,12 @@ jobs:
           # les compilations arrivent ensemble : une seule crée la publication
           gh release view binaires >/dev/null 2>&1 \
             || gh release create binaires --title "Exécutables" \
-                 --notes "Exécutables du simulateur et moteur WebAssembly, recompilés à chaque envoi sur main, pris par binaires.sh et binaires.cmd." \
+                 --notes "Exécutables du simulateur et moteur WebAssembly, recompilés à chaque envoi sur main. web_fire-<système> et feu-wasm : pris par scripts/binaires.sh et binaires.cmd. web_fire-prod-<système> : la production complète, à décompresser puis lancer par demarrer_WEB_FIRE." \
             || true
-          for f in web_fire-${{ matrix.nom }}.*; do
+          for f in web_fire-${{ matrix.nom }}.* web_fire-prod-${{ matrix.nom }}.*; do
             (sha256sum "$f" 2>/dev/null || shasum -a 256 "$f") | cut -d" " -f1 > "$f.sha256"
           done
-          gh release upload binaires web_fire-${{ matrix.nom }}.* --clobber
+          gh release upload binaires web_fire-${{ matrix.nom }}.* web_fire-prod-${{ matrix.nom }}.* --clobber
 
   wasm:
     runs-on: ubuntu-latest
@@ -96,12 +135,18 @@ jobs:
       - name: Essai du WASM
         run: cp -r wasm web/wasm && node tests/wasm.test.mjs
 
+      # pour les archives de production (job compiler)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wasm
+          path: wasm
+
       - name: Publication
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release view binaires >/dev/null 2>&1 \
             || gh release create binaires --title "Exécutables" \
-                 --notes "Exécutables du simulateur et moteur WebAssembly, recompilés à chaque envoi sur main, pris par binaires.sh et binaires.cmd." \
+                 --notes "Exécutables du simulateur et moteur WebAssembly, recompilés à chaque envoi sur main. web_fire-<système> et feu-wasm : pris par scripts/binaires.sh et binaires.cmd. web_fire-prod-<système> : la production complète, à décompresser puis lancer par demarrer_WEB_FIRE." \
             || true
           gh release upload binaires feu-wasm.tar.gz feu-wasm.tar.gz.sha256 --clobber
