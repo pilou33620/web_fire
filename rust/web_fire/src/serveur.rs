@@ -17,7 +17,7 @@ use flate2::write::GzEncoder;
 use flate2::Compression;
 use serde_json::{json, Value};
 use web_tools_commun::appairage::{self, Garde};
-use web_tools_commun::serveur::{decoder_url, ErreurCorps, Reponse, Requete, Serveur};
+use web_tools_commun::serveur::{decoder_chemin, ErreurCorps, Reponse, Requete, Serveur};
 
 pub const PORT: u16 = 8797;
 /// Une action de la page tient en quelques centaines d'octets.
@@ -172,7 +172,7 @@ fn type_mime(ext: &str) -> Option<&'static str> {
 /// Un fichier de web/ ; rien hors de ce dossier, ni fichier caché, ni extension inconnue.
 fn fichier(chemin: &str, gz_ok: bool) -> Reponse {
     let introuvable = || Reponse::texte(404, "introuvable");
-    let rel = if chemin == "/" { "index.html".to_string() } else { decoder_url(chemin.trim_start_matches('/')) };
+    let rel = if chemin == "/" { "index.html".to_string() } else { decoder_chemin(chemin.trim_start_matches('/')) };
     let p = Path::new(&rel);
     let sur = !rel.is_empty() && p.components().all(|c| matches!(c, Component::Normal(s) if !s.to_string_lossy().starts_with('.')));
     let Some(typ) = p.extension().and_then(|x| x.to_str()).and_then(type_mime).filter(|_| sur) else { return introuvable() };
