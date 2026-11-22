@@ -141,7 +141,7 @@ coupées (rouge) et enfumées (gris).
 
 ## Le modèle
 
-**Propagation** (`jeu/feu.py`, inspirée de Rothermel), minute par minute, d'hexagone à hexagone :
+**Propagation** (`rust/feu/src/feu.rs`, inspirée de Rothermel), minute par minute, d'hexagone à hexagone :
 vitesse = combustible × vent `exp(0,045·V·cos θ)` × pente `exp(3·dénivelé/300 m)` × humidité du combustible ×
 sécheresse × coupure (route, piste) × eau × retardant × défense. Chaque combustible a sa vitesse, sa durée de
 combustion, son intensité, sa résistance à l'eau et son aptitude aux sautes de feu (brandons par vent > 30 km/h).
@@ -150,11 +150,11 @@ Les réglages datent d'hexagones de 300 m : vitesses du feu, des engins et des c
 hexagones (`Grille.ech`), de sorte que les km/h restent vrais ; l'eau nécessaire pour abattre un hexagone, elle, ne
 l'est pas (sinon 16 CCF ne tiendraient plus un front d'un kilomètre).
 
-**Météo** (`jeu/meteo.py`) : cycle du jour (chaleur à 15 h 30, humidité la nuit), vent qui dérive, rafales,
+**Météo** (`rust/feu/src/meteo.rs`) : cycle du jour (chaleur à 15 h 30, humidité la nuit), vent qui dérive, rafales,
 bascule de vent possible, orages secs (foudre) puis pluie. Les avions ne volent ni la nuit ni par vent trop fort.
 Scénarios : journée ordinaire, forte chaleur, canicule et vent d'est (type Landiras 2022), orages secs, mistral.
 
-**Commandement** (`jeu/ia.py`), d'après la doctrine française :
+**Commandement** (`rust/feu/src/ia.rs`), d'après la doctrine française :
 1. attaque massive des feux naissants ;
 2. mise en défense des points sensibles menacés (évacuation préventive des campings) ;
 3. attaque au sol par les flancs, de l'arrière vers la tête, en s'appuyant sur le noir ;
