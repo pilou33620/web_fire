@@ -71,6 +71,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       - run: rustup target add wasm32-unknown-unknown
 
       - run: cargo build --release -p feu_wasm --target wasm32-unknown-unknown
@@ -87,6 +91,10 @@ jobs:
           tar -czf feu-wasm.tar.gz -C wasm .
           sha256sum feu-wasm.tar.gz | cut -d" " -f1 > feu-wasm.tar.gz.sha256
           ls -l wasm
+
+      # le WASM produit doit se charger et jouer depuis JavaScript (par LiaisonWasm) avant d'être publié
+      - name: Essai du WASM
+        run: cp -r wasm web/wasm && node tests/wasm.test.mjs
 
       - name: Publication
         env:
